@@ -5,36 +5,53 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cluedoc — example docs</title>
 <meta name="description" content="Cluedoc run over real open-source projects — browse the generated capability-tree papers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 
-<nav class="nav">
-  <div class="wrap">
-    <a class="brand" href="index.html"><span class="dot">◆</span> cluedoc</a>
+<header class="masthead">
+  <div class="wrap running-head">
+    <a class="wordmark" href="index.html">cluedoc</a>
     <span class="spacer"></span>
-    <a class="navlink hide-sm" href="index.html#how">How it works</a>
-    <a class="navlink" href="examples.html">Examples</a>
-    <a class="navlink" href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
+    <nav class="masthead-links">
+      <a class="hide-sm" href="index.html#how">How it works</a>
+      <a href="examples.html">Examples</a>
+      <a href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
+    </nav>
   </div>
-</nav>
+</header>
 
-<section class="band" style="border-top:none;">
+<main>
+<section class="frontmatter wrap">
+  <p class="eyebrow">Example docs</p>
+  <h1 class="title">Cluedoc, run on real projects.</h1>
+  <p class="abstract" style="margin-top: var(--space-xl);">
+    Each project below was documented by Cluedoc into a <code>.cluedoc/</code> capability tree. Open one to browse its papers — diagrams, and citation links, rendered just as your agent writes them.
+  </p>
+</section>
+
+<section class="section" style="border-top: 1px solid var(--color-rule);">
   <div class="wrap">
-    <p class="eyebrow" style="font-family:var(--mono);color:var(--accent);text-transform:uppercase;font-size:13px;letter-spacing:.04em;margin:0 0 14px;">Example docs</p>
-    <h2>Cluedoc, run on real projects</h2>
-    <p class="sub">Each project below was documented by Cluedoc into a <code>.cluedoc/</code> capability tree. Open one to browse its papers — banners, diagrams, and citation links, rendered just as your agent writes them.</p>
-
     <div id="gallery" class="gallery"></div>
   </div>
 </section>
+</main>
 
-<footer>
+<footer class="colophon">
   <div class="wrap">
-    <span>Cluedoc · MIT-licensed Agent Skill</span>
-    <span class="spacer"></span>
-    <a href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
-    <a href="https://agentskills.io">Agent Skills</a>
+    <div class="imprint">
+      <a class="wordmark" href="index.html">cluedoc</a>
+      <p>An MIT-licensed Agent Skill that documents a codebase as interlinked, visual papers.</p>
+      <p class="set-in">Set in Fraunces &amp; Iowan Old Style.</p>
+    </div>
+    <nav class="links">
+      <a href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
+      <a href="index.html">Home</a>
+      <a href="https://agentskills.io">Agent Skills</a>
+    </nav>
   </div>
 </footer>
 
@@ -54,10 +71,12 @@
       const root = 'examples/' + ex.slug + '/.cluedoc/README.md';
       const href = 'viewer.html?doc=' + encodeURIComponent(root) + '&title=' + encodeURIComponent(ex.name);
       return '<a class="example-card" href="' + href + '">'
-        + '<p class="repo">' + esc(ex.repo || '') + '</p>'
+        + '<div><p class="repo">' + esc(ex.repo || '') + '</p></div>'
+        + '<div>'
         + '<h3>' + esc(ex.name) + '</h3>'
         + '<p>' + esc(ex.description || '') + '</p>'
         + '<span class="meta">' + (ex.papers ? ex.papers + ' papers · ' : '') + 'Browse docs →</span>'
+        + '</div>'
         + '</a>';
     }).join('');
   } catch (e) {

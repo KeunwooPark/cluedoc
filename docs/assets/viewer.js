@@ -62,10 +62,9 @@
     return { fm: fm, body: body };
   }
 
-  // --- mermaid init (theme-aware) ---
-  var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  // --- mermaid init (light only) ---
   if (window.mermaid) {
-    mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'neutral', securityLevel: 'strict' });
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' });
   }
 
   // --- render one paper ---
