@@ -9,14 +9,14 @@
 
 :root {
   /* ---- neutrals (warm anchor, hue ~85) ---- */
-  --color-paper:    oklch(97.5% 0.006 90);   /* warm near-white page */
+  --color-paper:    oklch(98.5% 0.005 92);   /* warm near-white page */
   --color-paper-2:  oklch(99.2% 0.005 95);   /* plates / cards, brighter */
   --color-paper-3:  oklch(95.2% 0.008 88);   /* sunk panels, code */
   --color-rule:     oklch(89%   0.008 88);   /* hairline */
   --color-rule-2:   oklch(80%   0.010 85);   /* stronger rule */
   --color-neutral:  oklch(47%   0.011 85);   /* faint / captions (AA on paper) */
   --color-muted:    oklch(41%   0.010 82);   /* soft body */
-  --color-ink:      oklch(24%   0.010 80);   /* near-black, warm */
+  --color-ink:      oklch(21%   0.011 78);   /* near-black, warm */
 
   /* ---- brand accents (exact hexes, held as tokens) ---- */
   --color-blue:     #33658A;   /* primary — links, rules, CTA fill */
@@ -61,7 +61,7 @@ body {
   font-family: var(--serif);
   font-size: 18px;
   line-height: 1.65;
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: auto;
   text-rendering: optimizeLegibility;
 }
 
@@ -98,7 +98,7 @@ a:focus-visible, button:focus-visible {
   border-bottom: 1px solid var(--color-rule-2);
 }
 .running-head {
-  display: flex; align-items: baseline; gap: var(--space-lg);
+  display: flex; align-items: center; gap: var(--space-lg);
   height: 58px;
 }
 .wordmark {
@@ -335,7 +335,6 @@ a:focus-visible, button:focus-visible {
 .colophon .wrap { display: grid; gap: var(--space-lg); grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
 .colophon .imprint .wordmark { font-size: 20px; }
 .colophon .imprint p { margin: var(--space-xs) 0 0; color: var(--color-muted); font-size: 15px; max-width: 44ch; }
-.colophon .set-in { font-family: var(--mono); font-size: 11px; color: var(--color-neutral); margin-top: var(--space-sm); letter-spacing: 0.03em; }
 .colophon .links { display: flex; flex-direction: column; gap: var(--space-xs); text-align: right; }
 .colophon .links a { font-family: var(--mono); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-muted); }
 .colophon .links a:hover { color: var(--color-accent); text-decoration: none; }

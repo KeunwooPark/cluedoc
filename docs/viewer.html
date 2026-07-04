@@ -44,8 +44,33 @@
     border:1px solid var(--color-rule); overflow-x:auto; }
   .paper-body pre code { background:none; padding:0; color:inherit; font-size:inherit; }
   .paper-body pre.banner { color:var(--color-accent); }
-  .paper-body .mermaid { background:var(--color-paper-2); border:1px solid var(--color-rule);
+  .paper-body .mermaid { position:relative; background:var(--color-paper-2); border:1px solid var(--color-rule);
     border-radius:var(--radius); padding:var(--space-lg); text-align:center; overflow-x:auto; }
+  .mermaid-expand {
+    position:absolute; top:8px; right:8px; z-index:2; cursor:pointer;
+    font-family:var(--mono); font-size:11px; letter-spacing:.04em;
+    padding:4px 8px; border:1px solid var(--color-rule-2); border-radius:var(--radius);
+    background:var(--color-paper); color:var(--color-muted);
+    opacity:0; transition:opacity .15s ease;
+  }
+  .paper-body .mermaid:hover .mermaid-expand, .mermaid-expand:focus-visible { opacity:1; }
+  .mermaid-expand:hover { color:var(--color-accent); border-color:var(--color-accent); }
+
+  /* full-screen diagram lightbox */
+  .mmz-overlay { position:fixed; inset:0; z-index:100; display:none;
+    background:color-mix(in srgb, var(--color-ink) 82%, transparent); }
+  .mmz-overlay.open { display:block; }
+  .mmz-stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; cursor:grab; touch-action:none; }
+  .mmz-stage.grabbing { cursor:grabbing; }
+  .mmz-holder { will-change:transform; transform-origin:center center; }
+  .mmz-holder svg { display:block; max-width:none; background:var(--color-paper);
+    border-radius:var(--radius); padding:24px; box-shadow:0 12px 40px rgba(0,0,0,.35); }
+  .mmz-toolbar { position:absolute; top:14px; right:14px; z-index:2; display:flex; gap:6px; }
+  .mmz-toolbar button { font-family:var(--mono); font-size:15px; min-width:36px; height:36px; padding:0 10px;
+    border:1px solid var(--color-rule-2); border-radius:var(--radius);
+    background:var(--color-paper); color:var(--color-ink); cursor:pointer; line-height:1; }
+  .mmz-toolbar button:hover { color:var(--color-accent); border-color:var(--color-accent); }
   .paper-body table { border-collapse:collapse; width:100%; font-family:var(--serif); font-size:15px; }
   .paper-body th, .paper-body td { border:1px solid var(--color-rule); padding:8px 12px; text-align:left; }
   .paper-body th { background:var(--color-paper-3); }

@@ -128,10 +128,129 @@
     crumbsEl.innerHTML = crumb.join(' <span style="opacity:.5">/</span> ');
 
     if (window.mermaid) {
-      try { mermaid.run({ nodes: bodyEl.querySelectorAll('.mermaid') }); } catch (e) {}
+      try {
+        var ran = mermaid.run({ nodes: bodyEl.querySelectorAll('.mermaid') });
+        if (ran && ran.then) ran.then(decorateDiagrams).catch(function () {});
+        else decorateDiagrams();
+      } catch (e) {}
     }
     window.scrollTo(0, 0);
     highlightTree(thisDoc);
+  }
+
+  // --- mermaid zoom: click a diagram to open it full-screen with pan + zoom ---
+  function decorateDiagrams() {
+    var diagrams = bodyEl.querySelectorAll('.mermaid');
+    for (var i = 0; i < diagrams.length; i++) {
+      var d = diagrams[i];
+      if (d.getAttribute('data-zoomable') || !d.querySelector('svg')) continue;
+      d.setAttribute('data-zoomable', '1');
+      d.style.cursor = 'zoom-in';
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mermaid-expand';
+      btn.title = 'Enlarge diagram';
+      btn.textContent = '⤢ Enlarge';
+      d.appendChild(btn);
+      d.addEventListener('click', function () { openZoom(this); });
+    }
+  }
+
+  var zoom = null; // { overlay, stage, holder, scale, x, y }
+  function setupZoom() {
+    if (zoom) return zoom;
+    var overlay = document.createElement('div');
+    overlay.className = 'mmz-overlay';
+    overlay.innerHTML =
+      '<div class="mmz-toolbar">' +
+        '<button data-act="out" title="Zoom out">−</button>' +
+        '<button data-act="reset" title="Reset">⤢</button>' +
+        '<button data-act="in" title="Zoom in">+</button>' +
+        '<button data-act="close" title="Close (Esc)">✕</button>' +
+      '</div>' +
+      '<div class="mmz-stage"><div class="mmz-holder"></div></div>';
+    document.body.appendChild(overlay);
+    zoom = {
+      overlay: overlay,
+      stage: overlay.querySelector('.mmz-stage'),
+      holder: overlay.querySelector('.mmz-holder'),
+      scale: 1, x: 0, y: 0, dragging: false, px: 0, py: 0
+    };
+
+    function apply() {
+      zoom.holder.style.transform =
+        'translate(' + zoom.x + 'px,' + zoom.y + 'px) scale(' + zoom.scale + ')';
+    }
+    function setScale(s) { zoom.scale = Math.max(0.2, Math.min(8, s)); apply(); }
+
+    overlay.querySelector('.mmz-toolbar').addEventListener('click', function (e) {
+      var act = e.target.getAttribute('data-act');
+      if (!act) return;
+      e.stopPropagation();
+      if (act === 'in') setScale(zoom.scale * 1.25);
+      else if (act === 'out') setScale(zoom.scale / 1.25);
+      else if (act === 'reset') fitZoom();
+      else if (act === 'close') closeZoom();
+    });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay || e.target === zoom.stage) closeZoom(); });
+    zoom.stage.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      setScale(zoom.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+    }, { passive: false });
+    zoom.stage.addEventListener('pointerdown', function (e) {
+      zoom.dragging = true; zoom.px = e.clientX - zoom.x; zoom.py = e.clientY - zoom.y;
+      zoom.stage.classList.add('grabbing'); zoom.stage.setPointerCapture(e.pointerId);
+    });
+    zoom.stage.addEventListener('pointermove', function (e) {
+      if (!zoom.dragging) return;
+      zoom.x = e.clientX - zoom.px; zoom.y = e.clientY - zoom.py; apply();
+    });
+    function endDrag() { zoom.dragging = false; zoom.stage.classList.remove('grabbing'); }
+    zoom.stage.addEventListener('pointerup', endDrag);
+    zoom.stage.addEventListener('pointercancel', endDrag);
+    document.addEventListener('keydown', function (e) {
+      if (!zoom.overlay.classList.contains('open')) return;
+      if (e.key === 'Escape') closeZoom();
+      else if (e.key === '+' || e.key === '=') setScale(zoom.scale * 1.25);
+      else if (e.key === '-') setScale(zoom.scale / 1.25);
+      else if (e.key === '0') fitZoom();
+    });
+
+    zoom._apply = apply;
+    return zoom;
+  }
+
+  function fitZoom() {
+    var svg = zoom.holder.querySelector('svg');
+    if (!svg) return;
+    zoom.scale = 1; zoom.x = 0; zoom.y = 0; zoom._apply();
+    var sr = zoom.stage.getBoundingClientRect(), br = svg.getBoundingClientRect();
+    if (br.width && br.height) {
+      var fit = Math.min((sr.width - 80) / br.width, (sr.height - 80) / br.height);
+      zoom.scale = Math.max(0.2, Math.min(8, fit));
+    }
+    zoom.x = 0; zoom.y = 0; zoom._apply();
+  }
+
+  function openZoom(diagram) {
+    var svg = diagram.querySelector('svg');
+    if (!svg) return;
+    setupZoom();
+    var clone = svg.cloneNode(true);
+    clone.style.maxWidth = 'none';
+    clone.removeAttribute('height');
+    zoom.holder.innerHTML = '';
+    zoom.holder.appendChild(clone);
+    zoom.overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    fitZoom();
+  }
+
+  function closeZoom() {
+    if (!zoom) return;
+    zoom.overlay.classList.remove('open');
+    zoom.holder.innerHTML = '';
+    document.body.style.overflow = '';
   }
 
   function escapeHtml(s) {

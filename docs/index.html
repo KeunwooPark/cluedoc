@@ -22,16 +22,6 @@
   .paper-dek { font-size: 21px; line-height: 1.5; color: var(--color-muted); max-width: 52ch; margin: var(--space-md) 0 var(--space-xl); }
   .paper-dek strong { color: var(--color-ink); font-weight: 600; }
 
-  .frontplate {
-    margin: 0 0 var(--space-xl); background: var(--color-paper-2);
-    border: 1px solid var(--color-rule-2); border-radius: var(--radius);
-    font-family: var(--mono); font-size: 12.5px; line-height: 1.7; overflow: hidden;
-  }
-  .frontplate pre { margin: 0; padding: var(--space-md) var(--space-lg); overflow-x: auto; color: var(--color-ink); }
-  .frontplate .fk { color: var(--color-accent); }
-  .frontplate .fv { color: var(--color-ink); }
-  .frontplate .fc { color: var(--color-neutral); }
-
   .cta-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; margin: 0 0 var(--space-2xl); }
 
   /* paper body: mirrors the .cluedoc viewer so the page reads like a real paper */
@@ -98,14 +88,6 @@
     <span class="hl">understandable to the people who own it</span>. Fittingly, this page is one such paper.
   </p>
 
-  <figure class="frontplate" aria-label="This paper's frontmatter">
-<pre><span class="fc">---</span>
-<span class="fk">title</span>: <span class="fv">Cluedoc</span>
-<span class="fk">sources</span>:
-  <span class="fc">-</span> <span class="fv">SKILL.md</span>   <span class="fc"># the skill that defines this format</span>
-<span class="fc">---</span></pre>
-  </figure>
-
   <div class="cta-row">
     <a class="btn primary" href="#getting-started">Install the skill</a>
     <a class="btn" href="examples.html">Browse example docs →</a>
@@ -164,7 +146,7 @@ flowchart TD
       <a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">LLM-wiki</a> pattern: an LLM
       incrementally builds and maintains a persistent, interlinked wiki instead of re-reading raw sources at query
       time. Cluedoc shares that bet (documentation as a living artifact an agent keeps current) and is best read as
-      that pattern <strong>specialized for source code</strong>. Where LLM-wiki is domain-agnostic, leaving structure,
+      that pattern <span class="hl">specialized for source code</span>. Where LLM-wiki is domain-agnostic, leaving structure,
       format, and workflow to you, Cluedoc fixes them for a codebase: it is driven by code changes rather than a
       curated corpus, following callers and callees to revise the right papers; it prescribes one shape: a capability
       tree, one paper per feature, the six-section academic form; and it stays in the loop, the same agent updating
@@ -208,7 +190,7 @@ flowchart TD
 └── billing/
     └── README.md</code></pre>
     <p>
-      Splitting stops at the <strong>one-paper rule</strong>: divide a feature only when it has distinct
+      Splitting stops at the <span class="hl">one-paper rule</span>: divide a feature only when it has distinct
       sub-capabilities that each deserve their own hero visual; stop when a single focused paper says it all. It is a
       judgment about <em>capability</em>, never a mirror of the code's directory layout, so the "monorepo vs.
       single-package" question never comes up. One package or twenty, the docs are the same kind of capability tree.
@@ -241,7 +223,7 @@ flowchart TD
 
     <h3>Abstract prose, anchored to code</h3>
     <p>
-      Papers are <strong>about</strong> the code but never <strong>contain</strong> it. The prose stays abstract and
+      Papers are <span class="hl">about</span> the code but never <span class="hl">contain</span> it. The prose stays abstract and
       human, with no snippets, no symbols, no file paths. Concepts are named the way a user or designer would (the
       option's <em>value source</em>, the <em>parse loop</em>), not the way the compiler would. The link to the
       implementation lives in structured metadata instead: a <code>sources</code> list in the frontmatter, kept at the
@@ -252,8 +234,7 @@ sources:
   - lib/option.js
   - lib/command.js   # the parse loop</code></pre>
     <p>
-      That is the only place raw paths appear, which is exactly why the prose rarely changes when code moves. (The
-      frontmatter at the very top of <em>this</em> page points at <code>SKILL.md</code> for the same reason.)
+      That is the only place raw paths appear, which is exactly why the prose rarely changes when code moves.
     </p>
 
     <h3>Every paper has the same shape</h3>
@@ -280,7 +261,7 @@ sources:
     <h3>It also guides your reading</h3>
     <p>
       The papers are a map for reading, not only writing. Ask how something works (a feature, a flow, "where does X
-      happen") and Cluedoc answers, then appends a short <strong>Reading Guide</strong>: the two-to-five papers most
+      happen") and Cluedoc answers, then appends a short <span class="hl">Reading Guide</span>: the two-to-five papers most
       worth reading, in a suggested order, each with a clause on why it matters to your question. (It kicks in only
       once a <code>.cluedoc/</code> folder exists, and never invents a paper that isn't there.)
     </p>
@@ -329,7 +310,6 @@ sources:
     <div class="imprint">
       <a class="wordmark" href="index.html">cluedoc</a>
       <p>An MIT-licensed Agent Skill that documents a codebase as interlinked, visual papers.</p>
-      <p class="set-in">Set in Fraunces &amp; Iowan Old Style.</p>
     </div>
     <nav class="links">
       <a href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
