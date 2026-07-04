@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cluedoc — document your codebase as interlinked visual papers</title>
-<meta name="description" content="Cluedoc is an Agent Skill that documents a codebase as a set of interlinked, visual papers — one per feature, organized as a capability tree and cross-referenced like a citation graph. This page is itself one of those papers.">
+<title>Cluedoc: document your codebase as interlinked visual papers</title>
+<meta name="description" content="Cluedoc is an Agent Skill that documents a codebase as a set of interlinked, visual papers, one per feature, organized as a capability tree and cross-referenced like a citation graph. This page is itself one of those papers.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
   /* ---- This landing page is rendered as a Cluedoc paper ---- */
   .paper { max-width: 860px; margin: 0 auto; padding: var(--space-2xl) var(--space-lg) var(--space-3xl); min-width: 0; }
 
-  /* front matter block — the paper's own YAML, shown as a plate */
+  /* front matter block: the paper's own YAML, shown as a plate */
   .paper .eyebrow { margin-bottom: var(--space-md); }
   .paper-title {
     font-family: var(--display); font-optical-sizing: auto; font-weight: 600;
@@ -34,7 +34,7 @@
 
   .cta-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; margin: 0 0 var(--space-2xl); }
 
-  /* paper body — mirrors the .cluedoc viewer so the page reads like a real paper */
+  /* paper body: mirrors the .cluedoc viewer so the page reads like a real paper */
   .paper-body { font-family: var(--serif); font-size: 18px; line-height: 1.72; color: var(--color-ink); }
   .paper-body h2 {
     font-family: var(--mono); font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
@@ -94,7 +94,7 @@
   <h1 class="paper-title">Cluedoc</h1>
   <p class="paper-dek">
     Coding agents write software faster than any human can read it. Cluedoc has your agent
-    document as it builds — one human-readable paper per feature — so the system stays
+    document as it builds, one human-readable paper per feature, so the system stays
     <span class="hl">understandable to the people who own it</span>. Fittingly, this page is one such paper.
   </p>
 
@@ -134,7 +134,7 @@ flowchart TD
     <p>
       Cluedoc is an <a href="https://agentskills.io">Agent Skill</a> that <span class="hl">keeps a codebase
       understandable to humans</span> while coding agents rapidly change it. It treats a software system as a group of features and
-      writes one document per feature, in the style of an academic paper — a format
+      writes one document per feature, in the style of an academic paper, a format
       long established for explaining complex ideas, which is what a system's features usually are. The papers are
       visual, organized as a capability tree, and cross-referenced like citations; Cluedoc writes and maintains them
       as the code changes, so people can keep track of a system that now grows faster than they could read it line
@@ -143,17 +143,17 @@ flowchart TD
 
     <h2>Introduction</h2>
     <p>
-      Coding agents have changed who writes software. Increasingly the human does not type the code — they direct
+      Coding agents have changed who writes software. Increasingly the human does not type the code; they direct
       agents that do, and codebases grow far faster than before. The scarce resource shifts from writing to
       <span class="hl">understanding</span>: when you did not write a line of it, and it changed again this morning,
       how do you know what the system does, or whether the next change is safe?
     </p>
     <p>
-      Hand-written documentation cannot keep that pace — a README rots the moment the agent moves on. Cluedoc closes
+      Hand-written documentation cannot keep that pace, and a README rots the moment the agent moves on. Cluedoc closes
       the loop by putting the docs in the same hands as the code: the agent writes and maintains human-readable
       documentation as it builds. Cluedoc defines a software system as a group of features and gives
-      each feature one document. It writes those documents as academic papers —
-      abstract, introduction, figures, related work — because that is a well-established way to explain a complex
+      each feature one document. It writes those documents as academic papers
+      (abstract, introduction, figures, related work) because that is a well-established way to explain a complex
       idea, and a nontrivial feature usually is one. The reader needs a single mental model to begin: a system is a
       hierarchy of features, each explained by one visual paper that links to the ones around it.
     </p>
@@ -161,41 +161,37 @@ flowchart TD
     <h2>Related Work</h2>
     <p>
       Cluedoc's closest relative is the
-      <a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">LLM-wiki</a> pattern: rather than
-      re-reading raw sources at query time, an LLM incrementally builds and maintains a persistent, interlinked wiki
-      that sits between you and the material. Cluedoc shares that core bet — documentation as a living artifact an
-      agent keeps current — and is best read as that pattern <strong>specialized for source code</strong>. Where
-      LLM-wiki is deliberately domain-agnostic, leaving the directory structure, page format, and workflow up to you,
-      Cluedoc fixes those choices for a codebase, and that specialization is where its advantage comes from:
+      <a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">LLM-wiki</a> pattern: an LLM
+      incrementally builds and maintains a persistent, interlinked wiki instead of re-reading raw sources at query
+      time. Cluedoc shares that bet (documentation as a living artifact an agent keeps current) and is best read as
+      that pattern <strong>specialized for source code</strong>. Where LLM-wiki is domain-agnostic, leaving structure,
+      format, and workflow to you, Cluedoc fixes them for a codebase: it is driven by code changes rather than a
+      curated corpus, following callers and callees to revise the right papers; it prescribes one shape: a capability
+      tree, one paper per feature, the six-section academic form; and it stays in the loop, the same agent updating
+      docs as it edits code.
     </p>
-    <ul>
-      <li><strong>The source is live, not curated.</strong> LLM-wiki ingests immutable documents you assemble; a
-      codebase changes constantly and its structure — who calls what — is machine-readable. Cluedoc is driven by
-      those code changes and follows callers and callees up and down the feature tree to know exactly which papers
-      to revise.</li>
-      <li><strong>An opinionated format, not a blank schema.</strong> LLM-wiki leaves page shape to the domain.
-      Cluedoc prescribes one: a capability tree, one paper per feature, the six-section academic structure, mandatory
-      visuals, and a <code>sources</code> anchor tying prose to files without polluting it.</li>
-      <li><strong>Organized by capability, not by source.</strong> The tree follows what the system <em>does</em>,
-      independent of how the code is packaged — the view a human actually needs — rather than mirroring the files
-      that happened to be ingested.</li>
-      <li><strong>In the loop with the agent.</strong> Ingesting is a step you run in LLM-wiki; in Cluedoc the same
-      agent that edits the code updates the docs as it goes, so sync is continuous rather than a periodic pass.</li>
-    </ul>
     <p>
-      It also contrasts with classic documentation generators — Doxygen, Sphinx, JSDoc — which extract a reference
-      from source and comments. Those describe <em>symbols</em>, one entry per function or class; Cluedoc explains
-      <em>features</em>, one paper per capability, in language a designer would recognize. The skill itself is defined
-      in <a href="https://github.com/KeunwooPark/cluedoc/blob/main/SKILL.md"><code>SKILL.md</code></a>, built on the
-      open <a href="https://agentskills.io/specification">Agent Skills specification</a>.
+      Nearer in tooling is <a href="https://github.com/AsyncFuncAI/deepwiki-open">DeepWiki-Open</a>, an open-source AI
+      wiki generator that clones a repo, indexes it into a vector database, and serves a browsable wiki (with diagrams
+      and a RAG-backed "Ask" chat) from its own web app. It shares Cluedoc's aim but sits on the other side of the
+      tooling boundary: its wiki lives in an external app you host and regenerate on demand, drifting in between,
+      whereas Cluedoc's papers are plain Markdown under <code>.cluedoc/</code>, versioned with the code and kept
+      current in the loop: no server, no vector store.
+    </p>
+    <p>
+      It also contrasts with classic generators (Doxygen, Sphinx, JSDoc) that extract a reference from source and
+      comments. Those describe <em>symbols</em>, one entry per function; Cluedoc explains <em>features</em>, one paper
+      per capability, in language a designer would recognize. The skill itself is defined in
+      <a href="https://github.com/KeunwooPark/cluedoc/blob/main/SKILL.md"><code>SKILL.md</code></a>, built on the open
+      <a href="https://agentskills.io/specification">Agent Skills specification</a>.
     </p>
 
     <h2>Description</h2>
 
     <h3>One paper per feature, organized as a hierarchy</h3>
     <p>
-      The unit of documentation is one feature. Features form a hierarchy — large features contain
-      smaller sub-features — and Cluedoc mirrors that hierarchy in the folder structure: higher-level features live
+      The unit of documentation is one feature. Features form a hierarchy (large features contain
+      smaller sub-features), and Cluedoc mirrors that hierarchy in the folder structure: higher-level features live
       in higher folders, finer detail lives deeper. Everything sits in a <code>.cluedoc/</code> folder at the
       repository root, where every feature is a folder and its paper is the <code>README.md</code> inside it.
     </p>
@@ -214,11 +210,11 @@ flowchart TD
     <p>
       Splitting stops at the <strong>one-paper rule</strong>: divide a feature only when it has distinct
       sub-capabilities that each deserve their own hero visual; stop when a single focused paper says it all. It is a
-      judgment about <em>capability</em>, never a mirror of the code's directory layout — so the "monorepo vs.
+      judgment about <em>capability</em>, never a mirror of the code's directory layout, so the "monorepo vs.
       single-package" question never comes up. One package or twenty, the docs are the same kind of capability tree.
     </p>
 
-    <h3>It builds progressively — driven by your code, in both directions</h3>
+    <h3>It builds progressively, driven by your code, in both directions</h3>
     <p>
       Cluedoc does not document the whole repository in one pass. It works progressively: when code
       changes, a single change can ripple <em>up and down</em> the feature hierarchy, so it updates parent and child
@@ -239,14 +235,14 @@ flowchart TD
     <p>
       Over many changes the tree fills in and sharpens from every direction. Early on it may be shallow; it deepens as
       features reveal both the structures that contain them and the collaborators they rely on. As features appear,
-      move, and disappear, Cluedoc creates, splits, renames, and deletes folders to match — and re-checks that every
+      move, and disappear, Cluedoc creates, splits, renames, and deletes folders to match, and re-checks that every
       cross-link still resolves.
     </p>
 
     <h3>Abstract prose, anchored to code</h3>
     <p>
       Papers are <strong>about</strong> the code but never <strong>contain</strong> it. The prose stays abstract and
-      human — no snippets, no symbols, no file paths. Concepts are named the way a user or designer would (the
+      human, with no snippets, no symbols, no file paths. Concepts are named the way a user or designer would (the
       option's <em>value source</em>, the <em>parse loop</em>), not the way the compiler would. The link to the
       implementation lives in structured metadata instead: a <code>sources</code> list in the frontmatter, kept at the
       granularity of files so it survives ordinary refactors.
@@ -256,14 +252,14 @@ sources:
   - lib/option.js
   - lib/command.js   # the parse loop</code></pre>
     <p>
-      That is the only place raw paths appear — which is exactly why the prose rarely changes when code moves. (The
+      That is the only place raw paths appear, which is exactly why the prose rarely changes when code moves. (The
       frontmatter at the very top of <em>this</em> page points at <code>SKILL.md</code> for the same reason.)
     </p>
 
     <h3>Every paper has the same shape</h3>
     <p>
       Each paper is exactly what you are reading: YAML frontmatter followed by six sections, always in order, opening
-      with a hero visual and leaning on diagrams throughout — Mermaid for structure and flow, terminal graphics for
+      with a hero visual and leaning on diagrams throughout: Mermaid for structure and flow, terminal graphics for
       trees and layouts. Never a wall of prose where a picture is clearer.
     </p>
     <pre><code>┌─ a Cluedoc paper ──────────────────────────┐
@@ -272,19 +268,19 @@ sources:
 │  2  Abstract     what it is, and why         │
 │  3  Introduction the problem it solves       │
 │  4  Related Work links to other papers       │
-│  5  Description  how it works — visual-heavy  │
+│  5  Description  how it works · visual-heavy  │
 │  6  Conclusion   the takeaway; where to go    │
 └────────────────────────────────────────────┘</code></pre>
     <p>
-      "Related Work" is the connective tissue. Every cross-paper link lives there — the parent above, the children
-      below, and any non-adjacent paper that adds context — turning the docs into a citation graph you can traverse.
+      "Related Work" is the connective tissue. Every cross-paper link lives there (the parent above, the children
+      below, and any non-adjacent paper that adds context), turning the docs into a citation graph you can traverse.
       One rule holds it together: link only papers that already exist, never a dead link to a planned one.
     </p>
 
     <h3>It also guides your reading</h3>
     <p>
-      The papers are a map for reading, not only writing. Ask how something works — a feature, a flow, "where does X
-      happen" — and Cluedoc answers, then appends a short <strong>Reading Guide</strong>: the two-to-five papers most
+      The papers are a map for reading, not only writing. Ask how something works (a feature, a flow, "where does X
+      happen") and Cluedoc answers, then appends a short <strong>Reading Guide</strong>: the two-to-five papers most
       worth reading, in a suggested order, each with a clause on why it matters to your question. (It kicks in only
       once a <code>.cluedoc/</code> folder exists, and never invents a paper that isn't there.)
     </p>
@@ -301,15 +297,27 @@ sources:
     </div>
     <p style="font-size:15px; color:var(--color-muted);">
       Prefer to do it by hand? See the <a href="https://github.com/KeunwooPark/cluedoc#install">manual install</a>.
-      After that, Cluedoc mostly runs on its own — quietly keeping <code>.cluedoc/</code> in sync as you work. Call it
-      out by name only when you want a full pass over the whole repository.
+    </p>
+    <p>
+      Cluedoc is an Agent Skill, so it runs <em>through</em> your coding agent rather than as a background daemon;
+      there is no file watcher or git hook. Run it explicitly the first time, to bootstrap the tree:
+    </p>
+    <div class="setcmd">
+      <span class="cmd"><span class="prompt">$ </span>/cluedoc</span>
+    </div>
+    <p>
+      After that, the agent will often update the affected papers on its own as it edits code in a session; that is
+      what the skill asks it to do. But that proactive pass is best-effort, not a guarantee: changes you make outside
+      the agent, or turns where it simply doesn't reach for the skill, won't be picked up. When you want a sure sync
+      (before a commit, or a full pass over the repository), call <code>/cluedoc</code> by name. For hands-off updates,
+      wire it into a commit hook or CI step that invokes the skill against your changes.
     </p>
 
     <h2>Conclusion</h2>
     <p>
       Cluedoc turns a codebase into a navigable body of knowledge: one visual paper per capability, organized as a
       tree, cross-linked like a bibliography, and kept honest by the code it tracks. Read it the way you would a
-      research corpus — start at the root, follow the citations, stop when you understand. The natural next stop is a
+      research corpus: start at the root, follow the citations, stop when you understand. The natural next stop is a
       real one: browse the <a href="examples.html">example docs →</a> and see the format on projects you already know.
     </p>
 
