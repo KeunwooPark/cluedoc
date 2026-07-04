@@ -1,0 +1,5 @@
+# Agent / skill install artifacts (local tooling, not part of the project)
+.agents/
+.claude/
+.hallmark/
+skills-lock.json
