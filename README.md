@@ -39,6 +39,8 @@ Call out `cluedoc` explicitly only when you want a **full pass**: scan the whole
 
 > Run cluedoc over the whole repo and sync the docs.
 
+The papers also serve as a reading map. When you ask how the system works — a feature, a flow, "where does X happen" — Cluedoc answers, then appends a short **Reading Guide**: the most relevant papers to read, ordered as a suggested sequence. (This only kicks in once a `.cluedoc/` folder exists.)
+
 Either way, the papers live in a `.cluedoc/` folder at the repository root.
 
 ## License
