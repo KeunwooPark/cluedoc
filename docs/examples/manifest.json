@@ -1,0 +1,25 @@
+{
+  "examples": [
+    {
+      "slug": "commander",
+      "name": "Commander.js",
+      "repo": "tj/commander.js",
+      "description": "JavaScript · the CLI argument parser. Command model, the option parse loop, value resolution, positional arguments, help generation, and error handling.",
+      "papers": 8
+    },
+    {
+      "slug": "flask",
+      "name": "Flask",
+      "repo": "pallets/flask",
+      "description": "Python · the micro web framework. Application & request lifecycle, routing, the context system, blueprints, sessions, and configuration.",
+      "papers": 7
+    },
+    {
+      "slug": "cobra",
+      "name": "Cobra",
+      "repo": "spf13/cobra",
+      "description": "Go · the CLI framework. Command tree, execution & dispatch, lifecycle hooks, flag handling, argument validation, help/usage, and shell completion.",
+      "papers": 8
+    }
+  ]
+}

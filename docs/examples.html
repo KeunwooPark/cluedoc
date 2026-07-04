@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cluedoc — example docs</title>
+<meta name="description" content="Cluedoc run over real open-source projects — browse the generated capability-tree papers.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="dot">◆</span> cluedoc</a>
+    <span class="spacer"></span>
+    <a class="navlink hide-sm" href="index.html#how">How it works</a>
+    <a class="navlink" href="examples.html">Examples</a>
+    <a class="navlink" href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
+  </div>
+</nav>
+
+<section class="band" style="border-top:none;">
+  <div class="wrap">
+    <p class="eyebrow" style="font-family:var(--mono);color:var(--accent);text-transform:uppercase;font-size:13px;letter-spacing:.04em;margin:0 0 14px;">Example docs</p>
+    <h2>Cluedoc, run on real projects</h2>
+    <p class="sub">Each project below was documented by Cluedoc into a <code>.cluedoc/</code> capability tree. Open one to browse its papers — banners, diagrams, and citation links, rendered just as your agent writes them.</p>
+
+    <div id="gallery" class="gallery"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Cluedoc · MIT-licensed Agent Skill</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
+    <a href="https://agentskills.io">Agent Skills</a>
+  </div>
+</footer>
+
+<script>
+(async function () {
+  const gallery = document.getElementById('gallery');
+  try {
+    const res = await fetch('examples/manifest.json', { cache: 'no-cache' });
+    const data = await res.json();
+    const list = (data && data.examples) || [];
+    if (!list.length) {
+      gallery.className = '';
+      gallery.innerHTML = '<div class="gallery-empty">No examples published yet — check back soon.</div>';
+      return;
+    }
+    gallery.innerHTML = list.map(function (ex) {
+      const root = 'examples/' + ex.slug + '/.cluedoc/README.md';
+      const href = 'viewer.html?doc=' + encodeURIComponent(root) + '&title=' + encodeURIComponent(ex.name);
+      return '<a class="example-card" href="' + href + '">'
+        + '<p class="repo">' + esc(ex.repo || '') + '</p>'
+        + '<h3>' + esc(ex.name) + '</h3>'
+        + '<p>' + esc(ex.description || '') + '</p>'
+        + '<span class="meta">' + (ex.papers ? ex.papers + ' papers · ' : '') + 'Browse docs →</span>'
+        + '</a>';
+    }).join('');
+  } catch (e) {
+    gallery.className = '';
+    gallery.innerHTML = '<div class="gallery-empty">Could not load examples (' + esc(String(e)) + ').</div>';
+  }
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+})();
+</script>
+</body>
+</html>
