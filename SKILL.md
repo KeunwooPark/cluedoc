@@ -4,7 +4,7 @@ description: Automatically document a codebase as a set of interlinked, visual "
 license: MIT
 metadata:
   author: keunwoo
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Cluedoc
@@ -116,7 +116,7 @@ Keep `sources` at the granularity of files or directories (not symbols or line n
 
 Every doc Cluedoc produces is a *paper* with YAML frontmatter (`title`, `sources`) followed by exactly these sections, in order:
 
-1. **Hero visual** — a **banner + diagram pair** that captures the essence of the subject at a glance (see *Visuals*): a CLI-style banner naming the feature, immediately followed by a diagram of its key flow or structure. Opens the paper before any prose.
+1. **Hero visual** — a diagram that captures the essence of the subject at a glance (see *Visuals*): a diagram of its key flow or structure. Opens the paper before any prose.
 2. **Abstract** — a short paragraph: what this part of the system is and why it exists.
 3. **Introduction** — the problem it solves and the context a reader needs to start.
 4. **Related Work** — hyperlinks to *other Cluedoc papers* that give the reader context. This is how the documentation forms a navigable graph.
@@ -131,7 +131,7 @@ Choose the form that fits the subject best:
 - **Mermaid diagrams** — for structure, flows, relationships, state, sequences (graphs, flowcharts, sequence diagrams, state diagrams, ER diagrams, etc.).
 - **CLI-style text graphics** — for things that read better as monospace/terminal art: directory trees, ASCII boxes-and-arrows, tables, timelines, layouts.
 
-Pick whichever communicates the idea most clearly. Every paper opens with a **hero pair** — a CLI-style banner that names and frames the feature, immediately followed by a diagram (Mermaid or CLI graphic) of its key flow or structure — and uses additional visuals throughout the Description.
+Pick whichever communicates the idea most clearly. Every paper opens with a **hero visual** — a diagram (Mermaid or CLI graphic) of its key flow or structure — and uses additional visuals throughout the Description.
 
 ## Related Work = the Link Graph
 
