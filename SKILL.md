@@ -1,6 +1,6 @@
 ---
 name: cluedoc
-description: Automatically document a codebase as a set of interlinked, visual "papers". Use proactively after making code changes to keep the docs in .cluedoc/ in sync — updating the papers for features that were added, changed, or removed — without being asked. Also use when the user explicitly wants to generate or fully re-sync documentation for a repository (monorepo or single-package).
+description: Automatically document a codebase as a set of interlinked, visual "papers". Use proactively after making code changes to keep the docs in .cluedoc/ in sync — updating the papers for features that were added, changed, or removed — without being asked. Also use when the user explicitly wants to generate or fully re-sync documentation for a repository (monorepo or single-package). Additionally, whenever the user asks a question about how the system works and .cluedoc/ papers exist, append a short "Reading Guide" to the answer pointing at the most relevant existing papers to read.
 license: MIT
 metadata:
   author: keunwoo
@@ -146,3 +146,31 @@ Guidelines:
 - Prefer linking to Cluedoc papers over re-explaining shared concepts.
 - Every listed reference must be a working relative hyperlink (e.g. `../README.md`, `./login/README.md`).
 - **Link only papers that already exist. Never create a dead link to a planned-but-unwritten paper.** Because the tree is built progressively, many features will be known before they are documented. Refer to such a feature by name in plain text (no link), or — if it is important context — write its paper first, then link it. A missing paper you keep wanting to cite is a signal to write it next.
+
+## Reading Guide — Recommend Papers When Answering Questions
+
+The papers are not only for writing; they are a map for reading. Whenever the user asks a question about **how the system works** — a feature, a flow, an architectural decision, "where does X happen", "how does Y work" — answer the question first, then **append a short "Reading Guide"** that points them at the Cluedoc papers most worth reading to go deeper on that question.
+
+**When to append a guide.** Only when both hold:
+- The question is about understanding the system (its behavior, structure, or design) — not a pure coding task, a shell command, or a question unrelated to this repository.
+- A `.cluedoc/` folder with papers actually exists. If it does not, say nothing about a reading guide (optionally suggest running Cluedoc to generate the docs), and never invent papers or links.
+
+**How to build the guide.**
+1. **Map the question to features.** Identify which capabilities the question touches, then find the papers that cover them — start from the root paper and walk the feature tree / Related Work graph, the same structure Cluedoc writes.
+2. **Pick the entry point, then the path.** Recommend the single best paper to start from, followed by the few papers that build the necessary context around it (parents for the big picture, children for detail, non-adjacent papers for cross-cutting concerns). Order them as a **suggested reading sequence**, not an unranked list.
+3. **Keep it short.** Typically 2–5 papers. More than that is a table of contents, not a guide — prefer the most load-bearing ones.
+4. **Say why each matters.** One clause per entry: what the reader gets from it and why it's relevant to *their* question.
+
+**Rules.**
+- **Link only papers that exist** — the same dead-link rule as Related Work. If the ideal paper hasn't been written yet, name the feature in plain text and (optionally) note it as a gap worth documenting. Never fabricate a path.
+- Use working relative hyperlinks to each paper's `README.md`, resolved from the repository root (e.g. `.cluedoc/authentication/README.md`).
+- The guide **supplements** the answer; it never replaces answering the question. Do not defer the reader to the papers instead of responding.
+
+**Format.** Close the answer with a compact section, for example:
+
+```markdown
+### Reading Guide
+1. [Authentication](.cluedoc/authentication/README.md) — start here for the overall login flow your question is about.
+2. [Session Management](.cluedoc/authentication/session-management/README.md) — how the session your request creates is tracked afterward.
+3. [Token Refresh](.cluedoc/authentication/session-management/token-refresh/README.md) — the specific mechanism behind the expiry behavior you asked about.
+```
