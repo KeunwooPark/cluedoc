@@ -1,6 +1,10 @@
 ---
 name: cluedoc
-description: Automatically document a codebase as a set of interlinked, visual "papers". Use when the user wants to generate or update documentation for a repository (monorepo or single-package).
+description: Automatically document a codebase as a set of interlinked, visual "papers". Use proactively after making code changes to keep the docs in .cluedoc/ in sync — updating the papers for features that were added, changed, or removed — without being asked. Also use when the user explicitly wants to generate or fully re-sync documentation for a repository (monorepo or single-package).
+license: MIT
+metadata:
+  author: keunwoo
+  version: "0.1.0"
 ---
 
 # Cluedoc
