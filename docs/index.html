@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cluedoc — document your codebase as interlinked visual papers</title>
+<meta name="description" content="Cluedoc is an Agent Skill that documents a codebase as a set of interlinked, visual papers — one per feature, organized as a capability tree and cross-referenced like a citation graph.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="dot">◆</span> cluedoc</a>
+    <span class="spacer"></span>
+    <a class="navlink hide-sm" href="#how">How it works</a>
+    <a class="navlink" href="examples.html">Examples</a>
+    <a class="navlink" href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap" style="display:grid; gap:48px; grid-template-columns:1.05fr 0.95fr; align-items:center;">
+    <div style="min-width:0;">
+      <p class="eyebrow">Agent Skill · Auto-documentation</p>
+      <h1>Docs that read like papers, linked like citations.</h1>
+      <p class="lede">Cluedoc documents your codebase as a set of <strong>interlinked, visual papers</strong> — one focused document per feature, organized as a capability tree and cross-referenced like a citation graph.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="#install">Install the skill</a>
+        <a class="btn" href="examples.html">Browse example docs →</a>
+      </div>
+    </div>
+
+    <div class="terminal" aria-hidden="true">
+      <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="title">.cluedoc / authentication / README.md</span></div>
+<pre><span class="c-accent">   ██████ ██   ██ ██ ██████ █████
+  ██      ██   ██ ██ ██     ██  ██
+  ██      ██   ██ ██ ██████ ██  ██
+  ██      ██   ██ ██     ██ ██  ██
+   ██████  █████  ██ ██████ █████ </span>
+
+<span class="c-dim"># Authentication</span>
+
+<span class="c-prompt">Abstract</span>  How identity is established and
+          carried across a session.
+
+<span class="c-prompt">Related Work</span>
+  <span class="c-amber">→</span> ../README.md            <span class="c-dim">(root)</span>
+  <span class="c-amber">→</span> ./login/README.md
+  <span class="c-amber">→</span> ./session-management/README.md
+
+<span class="c-dim">   login ──▶ session ──▶ token-refresh</span>
+</pre>
+    </div>
+  </div>
+</header>
+
+<!-- ---- what it is ---- -->
+<section class="band" id="what">
+  <div class="wrap">
+    <h2>One paper per feature. A whole map of your system.</h2>
+    <p class="sub">Cluedoc organizes documentation by <em>capability</em>, not by code layout. Whether your repo is one package or twenty, you get the same thing: a navigable tree of feature papers you can start anywhere in and walk outward from.</p>
+    <div class="grid">
+      <div class="card">
+        <p class="ic">features › tree</p>
+        <h3>Capability tree</h3>
+        <p>Every feature is a folder with a <code>README.md</code> paper. Big features contain smaller ones — higher-level docs live in higher folders, finer detail lives deeper.</p>
+      </div>
+      <div class="card">
+        <p class="ic">prose › visual</p>
+        <h3>Visual by default</h3>
+        <p>Each paper opens with a CLI-style banner and a diagram, and leans on Mermaid and terminal graphics throughout. Never a wall of prose when a picture is clearer.</p>
+      </div>
+      <div class="card">
+        <p class="ic">links › graph</p>
+        <h3>A citation graph</h3>
+        <p>Papers cite each other under “Related Work.” Land on any paper and follow links to exactly the context you need — like reading a research bibliography.</p>
+      </div>
+      <div class="card">
+        <p class="ic">code › abstract</p>
+        <h3>About the code, never the code</h3>
+        <p>Prose stays abstract and human — no snippets, no symbols, no paths. A <code>sources</code> list in the frontmatter anchors each paper to the files that realize it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ---- how it works ---- -->
+<section class="band" id="how">
+  <div class="wrap">
+    <h2>It keeps itself in sync</h2>
+    <p class="sub">Cluedoc doesn’t document everything in one pass. It builds the docs progressively, driven by your code changes — updating the affected papers as features are added, changed, or removed, without being asked.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <div>
+          <h3>You change code</h3>
+          <p>Cluedoc locates the change and scans both directions — its callers (the larger feature that contains it) and its callees (the collaborators it builds on).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <div>
+          <h3>It places the change in the tree</h3>
+          <p>It infers what capability the code serves and finds where it belongs — the parent feature above it and the child features below it, up to a paper that already exists or the root.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <div>
+          <h3>It updates every affected paper</h3>
+          <p>Parent, self, and children alike. A small change touches one leaf; a structural change ripples across several levels — and every cross-link is kept resolving.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n">4</div>
+        <div>
+          <h3>It guides your reading</h3>
+          <p>Ask how something works and Cluedoc answers, then appends a short <strong>Reading Guide</strong> — the few papers most worth reading, in a suggested order.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ---- install ---- -->
+<section class="band" id="install">
+  <div class="wrap">
+    <h2>Install in one command</h2>
+    <p class="sub">The <a href="https://github.com/vercel-labs/skills">skills</a> CLI auto-detects your agent — Claude Code, Codex, Cursor, and many others — and installs Cluedoc for it.</p>
+    <div class="copybox">
+      <span class="cmd"><span class="c-prompt">$</span> npx skills add KeunwooPark/cluedoc</span>
+      <button id="copyBtn" type="button">Copy</button>
+    </div>
+    <p style="margin-top:22px;">
+      <a href="https://github.com/KeunwooPark/cluedoc#install">Manual install &amp; details →</a>
+    </p>
+  </div>
+</section>
+
+<!-- ---- examples teaser ---- -->
+<section class="band" id="examples">
+  <div class="wrap">
+    <h2>See it on real projects</h2>
+    <p class="sub">Cluedoc run over open-source repositories — browse the generated papers, rendered exactly as your agent would write them.</p>
+    <a class="btn primary" href="examples.html">Browse example docs →</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Cluedoc · MIT-licensed Agent Skill</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/KeunwooPark/cluedoc">GitHub</a>
+    <a href="https://agentskills.io">Agent Skills</a>
+  </div>
+</footer>
+
+<script>
+  const btn = document.getElementById('copyBtn');
+  btn && btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText('npx skills add KeunwooPark/cluedoc');
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => (btn.textContent = 'Copy'), 1600);
+    } catch { btn.textContent = 'Copy failed'; }
+  });
+</script>
+</body>
+</html>
