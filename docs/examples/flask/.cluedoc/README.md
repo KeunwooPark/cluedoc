@@ -8,16 +8,6 @@ sources:
   - src/flask/sansio/scaffold.py
 ---
 
-```
-███████╗██╗      █████╗ ███████╗██╗  ██╗
-██╔════╝██║     ██╔══██╗██╔════╝██║ ██╔╝
-█████╗  ██║     ███████║███████╗█████╔╝
-██╔══╝  ██║     ██╔══██║╚════██║██╔═██╗
-██║     ███████╗██║  ██║███████║██║  ██╗
-╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
-   a micro web framework for Python
-```
-
 ```mermaid
 flowchart TD
     W[Incoming web request] --> APP[The Application object]
