@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cluedoc — example docs</title>
-<meta name="description" content="Cluedoc run over real open-source projects — browse the generated capability-tree papers.">
+<title>Cluedoc: example docs</title>
+<meta name="description" content="Cluedoc run over real open-source projects. Browse the generated capability-tree papers.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
@@ -29,7 +29,7 @@
   <p class="eyebrow">Example docs</p>
   <h1 class="title">Cluedoc, run on real projects.</h1>
   <p class="abstract" style="margin-top: var(--space-xl);">
-    Each project below was documented by Cluedoc into a <code>.cluedoc/</code> capability tree. Open one to browse its papers — diagrams, and citation links, rendered just as your agent writes them.
+    Each project below was documented by Cluedoc into a <code>.cluedoc/</code> capability tree. Open one to browse its papers: diagrams, and citation links, rendered just as your agent writes them.
   </p>
 </section>
 
@@ -63,7 +63,7 @@
     const list = (data && data.examples) || [];
     if (!list.length) {
       gallery.className = '';
-      gallery.innerHTML = '<div class="gallery-empty">No examples published yet — check back soon.</div>';
+      gallery.innerHTML = '<div class="gallery-empty">No examples published yet. Check back soon.</div>';
       return;
     }
     gallery.innerHTML = list.map(function (ex) {
