@@ -2,7 +2,7 @@
    Renders a single .cluedoc paper (YAML frontmatter + Markdown + Mermaid),
    rewrites inter-paper links to stay in the viewer, and builds a sidebar by
    crawling the citation graph outward from the example's root paper.
-   No build step — everything is derived from the papers themselves. */
+   No build step; everything is derived from the papers themselves. */
 
 (function () {
   var params = new URLSearchParams(location.search);
@@ -112,7 +112,7 @@
     }
 
     bodyEl.innerHTML = html;
-    document.title = 'Cluedoc — ' + title;
+    document.title = 'Cluedoc: ' + title;
 
     // Breadcrumbs from the path under .cluedoc/
     var relFromRoot = thisDoc.slice(docRoot.length).replace(/README\.md$/, '');

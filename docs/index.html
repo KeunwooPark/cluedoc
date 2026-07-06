@@ -281,11 +281,18 @@ sources:
     </p>
     <p>
       Cluedoc is an Agent Skill, so it runs <em>through</em> your coding agent rather than as a background daemon;
-      there is no file watcher or git hook. Run it explicitly the first time, to bootstrap the tree:
+      there is no file watcher or git hook. Bootstrap a new repository with <code>init</code>:
     </p>
     <div class="setcmd">
-      <span class="cmd"><span class="prompt">$ </span>/cluedoc</span>
+      <span class="cmd"><span class="prompt">$ </span>cluedoc init</span>
     </div>
+    <p>
+      <code>init</code> does two things. It writes a shallow starter tree (a root paper plus one paper per
+      top-level feature) so you begin with a real skeleton instead of an empty folder, and it wires a short
+      sync-trigger block into your repo's agent-instructions file (<code>AGENTS.md</code>, or whichever your agent
+      already uses) so future sessions are reminded to keep the docs in sync. To bootstrap without touching those
+      files, run the skill plainly instead, with <code>/cluedoc</code>.
+    </p>
     <p>
       After that, the agent will often update the affected papers on its own as it edits code in a session; that is
       what the skill asks it to do. But that proactive pass is best-effort, not a guarantee: changes you make outside

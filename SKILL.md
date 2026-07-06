@@ -1,10 +1,10 @@
 ---
 name: cluedoc
-description: Automatically document a codebase as a set of interlinked, visual "papers". Use proactively after making code changes to keep the docs in .cluedoc/ in sync — updating the papers for features that were added, changed, or removed — without being asked. Also use when the user explicitly wants to generate or fully re-sync documentation for a repository (monorepo or single-package). Additionally, whenever the user asks a question about how the system works and .cluedoc/ papers exist, append a short "Reading Guide" to the answer pointing at the most relevant existing papers to read.
+description: Automatically document a codebase as a set of interlinked, visual "papers". Use proactively after making code changes to keep the docs in .cluedoc/ in sync — updating the papers for features that were added, changed, or removed — without being asked. Also use when the user explicitly wants to generate or fully re-sync documentation for a repository (monorepo or single-package). Run the `init` command (e.g. "cluedoc init") to bootstrap a new repository: it writes a shallow starter tree of papers and wires a sync-trigger block into the repo's agent-instructions file. Additionally, whenever the user asks a question about how the system works and .cluedoc/ papers exist, append a short "Reading Guide" to the answer pointing at the most relevant existing papers to read.
 license: MIT
 metadata:
   author: keunwoo
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # Cluedoc
@@ -73,6 +73,42 @@ When code is added or changed, Cluedoc:
 ```
 
 Over many changes the tree fills in and sharpens from every direction. Early on it may be shallow; it deepens as features reveal both the structures that contain them and the collaborators they rely on.
+
+## The `init` Command — Bootstrap and Wire-Up
+
+`init` is the one-time way to *start* Cluedoc in a repository. Trigger it when the user runs `/cluedoc init`, says "cluedoc init", or asks to initialize/bootstrap/set up Cluedoc here. It does two things: lay down a shallow starter tree of papers, and wire up a persistent trigger so future sessions keep the docs in sync.
+
+This is **not** a second documentation mode. `init` produces the same capability tree as the progressive build — it just does a fast, shallow first pass and stops. Everything after `init` is ordinary progressive updating.
+
+### Job 1 — Generate the quick essential papers (shallow, breadth-first)
+
+Create a starter skeleton, then let the progressive build deepen it later.
+
+1. **Guard.** If `.cluedoc/` already has papers, do **not** overwrite. Tell the user it's already initialized and offer a normal sync instead. Only proceed when `.cluedoc/` is absent or empty.
+2. **Find the top-level features.** Survey the repository and identify its handful of major capabilities in language-neutral terms (the same "capability, not code layout" judgment used everywhere in Cluedoc). Aim for a small set — typically 3–7 — not an exhaustive list.
+3. **Write only two levels:**
+   - The **root paper** (`.cluedoc/README.md`) — the whole-repository overview.
+   - **One paper per top-level feature** (`.cluedoc/<slug>/README.md`).
+   Each is a full paper: frontmatter (`title`, `sources`) plus the six sections and a hero visual, per *The Paper Structure*.
+4. **Do not recurse.** Stop at the top level. Sub-features are left for the progressive build — this keeps `init` fast and honors the "progressive, not one pass" principle. The root's Related Work links the top-level papers you just created (they exist now, so the links are live — never link papers you haven't written).
+
+### Job 2 — Wire up the sync trigger
+
+Write a short, marker-delimited block into the repository's agent-instructions file so every future session is reminded to keep `.cluedoc/` in sync — closing the gap where a proactive update is missed because the agent never reached for the skill.
+
+- **Target file.** Prefer `AGENTS.md` at the repository root. If it is absent, fall back to whatever agent-instructions file the repo already uses (for example `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, or `.github/copilot-instructions.md`). If none exists, create `AGENTS.md`.
+- **Idempotent.** Wrap the injected text in `<!-- cluedoc:start -->` … `<!-- cluedoc:end -->`. On re-run, replace the existing block in place — never duplicate it. When adding to a file that already has content, append the block after a blank line and leave the rest untouched.
+- **Block content** (keep it short — point at the skill, don't restate it):
+
+```markdown
+<!-- cluedoc:start -->
+## Documentation (Cluedoc)
+
+This repository keeps human-readable, visual "papers" under `.cluedoc/`, one per feature. After finishing a set of code changes, use the **cluedoc** skill to update every affected paper — parent, self, and children — so the docs stay in sync with the code. When answering questions about how the system works, consult these papers and append a short Reading Guide.
+<!-- cluedoc:end -->
+```
+
+After both jobs, briefly report what was created: the root paper, the top-level feature papers, and which file received the trigger block.
 
 ## Keeping Papers in Sync
 

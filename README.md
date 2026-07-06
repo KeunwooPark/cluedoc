@@ -53,7 +53,11 @@ The directory name must be `cluedoc` to match the `name` field in the frontmatte
 
 ## Use
 
-Cluedoc is an Agent Skill, so it runs through your coding agent rather than as a background daemon; there is no file watcher or git hook. Bootstrap the docs the first time by running the skill explicitly:
+Cluedoc is an Agent Skill, so it runs through your coding agent rather than as a background daemon; there is no file watcher or git hook. Bootstrap a new repository with the `init` command:
+
+> cluedoc init
+
+`init` does two things: it writes a shallow starter tree — a root paper plus one paper per top-level feature — so you begin with a real skeleton instead of an empty folder, and it wires a short sync-trigger block into your repo's agent-instructions file (`AGENTS.md`, or whichever your agent already uses) so future sessions are reminded to keep the docs in sync. To bootstrap without touching those files, run the skill plainly instead:
 
 > /cluedoc
 
