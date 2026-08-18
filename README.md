@@ -65,7 +65,25 @@ After that, the agent will often update the affected papers on its own as it edi
 
 > Run cluedoc over the whole repo and sync the docs.
 
-For hands-off updates, wire it into a commit hook or CI step that invokes the skill against your changes. Either way, the papers live in a `.cluedoc/` folder at the repository root.
+For hands-off updates, wire it into a commit hook or a CI step that invokes the skill against your changes — see [On every pull request](#on-every-pull-request) for ready-made GitHub Actions workflows. Either way, the papers live in a `.cluedoc/` folder at the repository root.
+
+## On every pull request
+
+Papers are a generated artifact derived from the code, so the way to automate them is the way you already automate a lockfile or a generated API client: let a bot write them into the pull request branch, so the docs are reviewed and merged atomically with the change that caused them. Two workflows are in [`examples/`](examples/) — [`cluedoc-pr.yml`](examples/cluedoc-pr.yml) syncs papers into the PR, and [`cluedoc-main.yml`](examples/cluedoc-main.yml) syncs them after a merge. Copy either into `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret, and the agent runs Cluedoc against the PR's diff and pushes the papers it changed. If Changesets is the analogy that brought you here, note the difference: a changeset records intent that cannot be derived from the diff, which is why you write it by hand. A paper can be derived, so nothing needs to be declared — but papers are also mutable shared files rather than append-only ones, which is where the third caveat below comes from.
+
+Three things decide whether this holds up in practice.
+
+**The loop.** The bot's own commit updates the PR, which fires `synchronize`, which would run the workflow again. Path filters do not save you here: on `pull_request` events GitHub evaluates `paths-ignore` against the whole `base...head` diff, so a PR that still contains code files keeps matching no matter what the bot committed. The fix is to push as `GITHUB_TOKEN` — a `synchronize` it causes creates a run that requires manual approval instead of starting on its own — with a check on the event sender as a second guard.
+
+**Forks.** A pull request from a fork gets no secrets and a read-only token, so the agent cannot run at all. The PR workflow skips those rather than failing on them, which means fork contributions merge with stale papers unless you also run the `main` workflow to catch them on the way in. If you take outside contributions, run both.
+
+**Conflicts.** Two open pull requests that touch the same feature will both rewrite that feature's paper and conflict, in generated prose. Do not resolve it by hand. Take the base branch's version and let the next sync regenerate:
+
+```bash
+git checkout --theirs .cluedoc/ && git add .cluedoc/
+```
+
+Optionally add `.cluedoc/** linguist-generated=true` to `.gitattributes`, so papers collapse by default in the PR diff and reviewers expand only the ones they care about.
 
 ## License
 
