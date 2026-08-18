@@ -297,8 +297,19 @@ sources:
       After that, the agent will often update the affected papers on its own as it edits code in a session; that is
       what the skill asks it to do. But that proactive pass is best-effort, not a guarantee: changes you make outside
       the agent, or turns where it simply doesn't reach for the skill, won't be picked up. When you want a sure sync
-      (before a commit, or a full pass over the repository), call <code>/cluedoc</code> by name. For hands-off updates,
-      wire it into a commit hook or CI step that invokes the skill against your changes.
+      (before a commit, or a full pass over the repository), call <code>/cluedoc</code> by name.
+    </p>
+    <p>
+      For hands-off updates, run it in CI. Papers are a generated artifact derived from the code, so automate them the
+      way you already automate a lockfile or a generated API client: let a bot write them into the pull request branch,
+      so the docs are reviewed and merged atomically with the change that caused them. Two ready-made GitHub Actions
+      workflows &mdash; one that syncs papers into a pull request, one that syncs them after a merge &mdash; live in
+      <a href="https://github.com/KeunwooPark/cluedoc/tree/main/examples">examples/</a>.
+    </p>
+    <p style="font-size:15px; color:var(--color-muted);">
+      The <a href="https://github.com/KeunwooPark/cluedoc#on-every-pull-request">setup notes</a> cover the three things
+      that decide whether it holds up: the re-trigger loop, pull requests from forks, and how to resolve a conflict in
+      a generated paper.
     </p>
 
     <h2>Conclusion</h2>
