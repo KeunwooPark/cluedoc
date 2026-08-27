@@ -8,22 +8,6 @@ Fittingly, this project's landing page is itself one of these papers.
 
 Coding agents have changed who writes software. Increasingly the human does not type the code; they direct agents that do, and codebases grow far faster than before. The scarce resource shifts from writing to understanding: when you did not write a line of it, and it changed again this morning, how do you know what the system does, or whether the next change is safe? Hand-written documentation cannot keep that pace, and a README rots the moment the agent moves on. Cluedoc closes the loop by putting the docs in the same hands as the code, so the agent writes and maintains human-readable documentation as it builds.
 
-## How it works
-
-**One paper per feature, organized as a hierarchy.** The unit of documentation is one feature. Features form a tree: large features contain smaller sub-features, and Cluedoc mirrors that hierarchy in the folder structure. Everything lives in a `.cluedoc/` folder at the repository root, where every feature is a folder and its paper is the `README.md` inside it. A feature is split only when it has distinct sub-capabilities that each deserve their own hero visual; the split is a judgment about capability, never a mirror of the code's directory layout, so the "monorepo vs. single-package" question never comes up.
-
-**It builds progressively, driven by your code.** Cluedoc does not document the whole repository in one pass. When code changes, a single change can ripple up and down the feature hierarchy, so it updates parent and child papers alike. Upward, it scans where the changed code is used (its callers) to find the larger feature it belongs to; downward, it scans what the code uses (its callees) to find the collaborators worth documenting.
-
-**Abstract prose, anchored to code.** Papers are about the code but never contain it. The prose stays abstract and human, with no snippets, symbols, or file paths. The link to the implementation lives in a `sources` list in the frontmatter, kept at the granularity of files so it survives ordinary refactors.
-
-**Every paper has the same shape.** Each paper is YAML frontmatter followed by six sections, always in order: a hero visual, abstract, introduction, related work, description, and conclusion. Related Work is the connective tissue: every cross-paper link lives there, turning the docs into a citation graph you can traverse.
-
-**It also guides your reading.** When you ask how the system works (a feature, a flow, "where does X happen"), Cluedoc answers, then appends a short **Reading Guide**: the two-to-five papers most worth reading, in a suggested order. This only kicks in once a `.cluedoc/` folder exists.
-
-## How it compares
-
-Cluedoc's closest relative is the [LLM-wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern, where an LLM incrementally builds and maintains a persistent, interlinked wiki instead of re-reading raw sources at query time. Cluedoc is that pattern specialized for source code: it is driven by code changes rather than a curated corpus, prescribes one shape (a capability tree, one paper per feature, the six-section academic form), and stays in the loop as the agent edits code. It differs from tools like [DeepWiki-Open](https://github.com/AsyncFuncAI/deepwiki-open), whose wiki lives in an external app backed by a vector index that you host and regenerate on demand: Cluedoc's papers are plain Markdown under `.cluedoc/`, versioned with the code, with no server and no vector store. And unlike classic generators (Doxygen, Sphinx, JSDoc) that describe symbols one entry per function, Cluedoc explains features, one paper per capability, in language a designer would recognize.
-
 ## Install
 
 ```bash
@@ -65,9 +49,11 @@ After that, the agent will often update the affected papers on its own as it edi
 
 > Run cluedoc over the whole repo and sync the docs.
 
-For hands-off updates, wire it into a commit hook or a CI step that invokes the skill against your changes — see [On every pull request](#on-every-pull-request) for ready-made GitHub Actions workflows. Either way, the papers live in a `.cluedoc/` folder at the repository root.
+Either way, the papers live in a `.cluedoc/` folder at the repository root. For hands-off updates, run it in CI — the [GitHub Action](#github-action) below does the same thing on every pull request, and bootstraps the tree itself if there is no `.cluedoc/` yet.
 
-## On every pull request
+<a id="on-every-pull-request"></a>
+
+## GitHub Action
 
 Papers are a generated artifact derived from the code, so the way to automate them is the way you already automate a lockfile or a generated API client: let a bot write them into the pull request branch, so the docs are reviewed and merged atomically with the change that caused them.
 
@@ -84,29 +70,32 @@ jobs:
       api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-Add an `ANTHROPIC_API_KEY` secret and the agent runs Cluedoc against the PR's diff and pushes the papers it changed. It works out the diff range from the event, so there is nothing to configure per repository. Three ready-made workflows are in [`examples/`](examples/): [`cluedoc-pr.yml`](examples/cluedoc-pr.yml) syncs papers into the PR, [`cluedoc-main.yml`](examples/cluedoc-main.yml) syncs them after a merge, and [`cluedoc-composed.yml`](examples/cluedoc-composed.yml) uses the action directly — `KeunwooPark/cluedoc@v1` — for anyone who wants the papers without the bot commit.
+Add an `ANTHROPIC_API_KEY` secret and that is the whole setup. The action works out the diff range from the event, so there is nothing to configure per repository and no `git diff` expression to write. Three ready-made workflows are in [`examples/`](examples/): [`cluedoc-pr.yml`](examples/cluedoc-pr.yml) syncs papers into the PR, [`cluedoc-main.yml`](examples/cluedoc-main.yml) syncs them after a merge, and [`cluedoc-composed.yml`](examples/cluedoc-composed.yml) uses the action directly, `KeunwooPark/cluedoc@v1`, for anyone who wants the papers without the bot commit.
 
-If your organization restricts which actions may run, allow `KeunwooPark/*` under Settings → Actions → General; otherwise the run fails before its first step.
+If Changesets is the analogy that brought you here, note the difference: a changeset records intent that cannot be derived from the diff, which is why you write it by hand. A paper can be derived, so nothing needs to be declared — but papers are also mutable shared files rather than append-only ones, which is where the conflict question below comes from.
 
-If Changesets is the analogy that brought you here, note the difference: a changeset records intent that cannot be derived from the diff, which is why you write it by hand. A paper can be derived, so nothing needs to be declared — but papers are also mutable shared files rather than append-only ones, which is where the third caveat below comes from.
+### Starting from nothing
 
-Three things decide whether this holds up in practice.
+Run it on a repository with no `.cluedoc/` and it bootstraps instead of syncing: a root paper plus one per top-level feature, the same shallow starter tree `/cluedoc init` writes.
 
-**The loop.** The bot's own commit updates the PR, which fires `synchronize`, which would run the workflow again. Path filters do not save you here: on `pull_request` events GitHub evaluates `paths-ignore` against the whole `base...head` diff, so a PR that still contains code files keeps matching no matter what the bot committed. The fix is to push as `GITHUB_TOKEN` — a `synchronize` it causes creates a run that requires manual approval instead of starting on its own — with a check on the event sender as a second guard.
+It stops there. `init`'s second job wires a sync-trigger block into your `AGENTS.md`, and that is a different kind of edit from a generated paper — the argument for letting a bot commit papers unasked is that papers are *derived*, and an agent-instructions file is not. Run `/cluedoc init` locally for that, or pass `bootstrap: full` if you would rather the action did it.
 
-**Forks.** A pull request from a fork gets no secrets and a read-only token, so the agent cannot run at all. The PR workflow skips those rather than failing on them, which means fork contributions merge with stale papers unless you also run the `main` workflow to catch them on the way in. If you take outside contributions, run both.
+### What you still decide
 
-**Conflicts.** Two open pull requests that touch the same feature will both rewrite that feature's paper and conflict, in generated prose. The action resolves this itself: it keeps the branch's version and lets the next sync regenerate, because the losing side is not lost work — it is work that will be redone from the code in a moment. That reasoning only holds inside `.cluedoc/`, so a conflict anywhere else stops the run for a human.
+**Forks.** A pull request from a fork gets no secrets and a read-only token, so the agent cannot run at all. The action skips those rather than failing on them, which means fork contributions merge with stale papers unless you also run the `main` workflow to catch them on the way in. If you take outside contributions, run both.
 
-Optionally add `.cluedoc/** linguist-generated=true` to `.gitattributes`, so papers collapse by default in the PR diff and reviewers expand only the ones they care about.
+**Diff noise.** Optionally add `.cluedoc/** linguist-generated=true` to `.gitattributes`, so papers collapse by default in the PR diff and reviewers expand only the ones they care about.
 
-## Starting from nothing
+<details>
+<summary>Two things the action handles, and why they needed handling</summary>
 
-Run the action on a repository with no `.cluedoc/` and it bootstraps instead of syncing: a root paper plus one per top-level feature, the same shallow starter tree `/cluedoc init` writes.
+**The loop.** The bot's own commit updates the PR, which fires `synchronize`, which would run the workflow again. Path filters do not save you here: on `pull_request` events GitHub evaluates `paths-ignore` against the whole `base...head` diff, so a PR that still contains code files keeps matching no matter what the bot committed. The action pushes as `GITHUB_TOKEN` — a `synchronize` it causes creates a run that requires manual approval instead of starting on its own — and checks the event sender as a second guard.
 
-It stops there. `init`'s second job wires a sync-trigger block into your `AGENTS.md`, and that is a different kind of edit from a generated paper — the argument for letting a bot commit papers unasked is that papers are derived, and an agent-instructions file is not. Run `/cluedoc init` locally for that, or pass `bootstrap: full` if you would rather the action did it.
+**Conflicts.** Two open pull requests that touch the same feature will both rewrite that feature's paper and conflict, in generated prose. The action keeps the branch's version and lets the next sync regenerate, because the losing side is not lost work — it is work that will be redone from the code in a moment. That reasoning holds only inside `.cluedoc/`, so a conflict anywhere else stops the run for a human.
 
-## Composing it
+</details>
+
+### Composing it
 
 The action reports what it did, so Cluedoc can be a step in a job you already have rather than a bot that commits:
 
@@ -116,7 +105,30 @@ The action reports what it did, so Cluedoc can be a step in a job you already ha
 | `papers` | newline-separated paths |
 | `commit` | SHA of the docs commit, empty when nothing changed |
 
-With `push: false` the papers are left in the working tree and nothing is committed — see [`cluedoc-composed.yml`](examples/cluedoc-composed.yml), which opens a pull request with them instead.
+With `push: false` the papers are left in the working tree and nothing is committed — see [`cluedoc-composed.yml`](examples/cluedoc-composed.yml), which opens a separate pull request with them instead.
+
+### If it fails before it starts
+
+Two things bite organizations rather than individuals, and neither is fixable from inside the action:
+
+- **Action policy.** If your organization restricts which actions may run, allow `KeunwooPark/*` under Settings → Actions → General. Otherwise the run fails before its first step, with an error that does not obviously name the cause.
+- **Pinning.** `@v1` is a moving tag. If your policy requires a pinned SHA, `uses: KeunwooPark/cluedoc@<sha>` works the same way — the skill is installed from that same checkout, so the papers and the prompt that wrote them stay on the version you pinned.
+
+## How it works
+
+**One paper per feature, organized as a hierarchy.** The unit of documentation is one feature. Features form a tree: large features contain smaller sub-features, and Cluedoc mirrors that hierarchy in the folder structure. Everything lives in a `.cluedoc/` folder at the repository root, where every feature is a folder and its paper is the `README.md` inside it. A feature is split only when it has distinct sub-capabilities that each deserve their own hero visual; the split is a judgment about capability, never a mirror of the code's directory layout, so the "monorepo vs. single-package" question never comes up.
+
+**It builds progressively, driven by your code.** Cluedoc does not document the whole repository in one pass. When code changes, a single change can ripple up and down the feature hierarchy, so it updates parent and child papers alike. Upward, it scans where the changed code is used (its callers) to find the larger feature it belongs to; downward, it scans what the code uses (its callees) to find the collaborators worth documenting.
+
+**Abstract prose, anchored to code.** Papers are about the code but never contain it. The prose stays abstract and human, with no snippets, symbols, or file paths. The link to the implementation lives in a `sources` list in the frontmatter, kept at the granularity of files so it survives ordinary refactors.
+
+**Every paper has the same shape.** Each paper is YAML frontmatter followed by six sections, always in order: a hero visual, abstract, introduction, related work, description, and conclusion. Related Work is the connective tissue: every cross-paper link lives there, turning the docs into a citation graph you can traverse.
+
+**It also guides your reading.** When you ask how the system works (a feature, a flow, "where does X happen"), Cluedoc answers, then appends a short **Reading Guide**: the two-to-five papers most worth reading, in a suggested order. This only kicks in once a `.cluedoc/` folder exists.
+
+## How it compares
+
+Cluedoc's closest relative is the [LLM-wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern, where an LLM incrementally builds and maintains a persistent, interlinked wiki instead of re-reading raw sources at query time. Cluedoc is that pattern specialized for source code: it is driven by code changes rather than a curated corpus, prescribes one shape (a capability tree, one paper per feature, the six-section academic form), and stays in the loop as the agent edits code. It differs from tools like [DeepWiki-Open](https://github.com/AsyncFuncAI/deepwiki-open), whose wiki lives in an external app backed by a vector index that you host and regenerate on demand: Cluedoc's papers are plain Markdown under `.cluedoc/`, versioned with the code, with no server and no vector store. And unlike classic generators (Doxygen, Sphinx, JSDoc) that describe symbols one entry per function, Cluedoc explains features, one paper per capability, in language a designer would recognize.
 
 ## License
 

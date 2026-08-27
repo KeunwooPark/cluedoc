@@ -30,6 +30,10 @@ for suite in steps mode install commit comment; do
   echo
 done
 
+echo "== docs =="
+python3 "$HERE/links.py" "$ROOT" | sed 's/^/  /' || rc=1
+echo
+
 echo
 if [ "$rc" = 0 ]; then echo "all suites passed"; else echo "FAILURES"; fi
 exit "$rc"

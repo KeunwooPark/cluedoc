@@ -302,14 +302,17 @@ sources:
     <p>
       For hands-off updates, run it in CI. Papers are a generated artifact derived from the code, so automate them the
       way you already automate a lockfile or a generated API client: let a bot write them into the pull request branch,
-      so the docs are reviewed and merged atomically with the change that caused them. Two ready-made GitHub Actions
-      workflows &mdash; one that syncs papers into a pull request, one that syncs them after a merge &mdash; live in
-      <a href="https://github.com/KeunwooPark/cluedoc/tree/main/examples">examples/</a>.
+      so the docs are reviewed and merged atomically with the change that caused them. There is a GitHub Action for
+      exactly that &mdash; add an API key and it syncs the papers a pull request affects, working out the diff range
+      from the event and bootstrapping the tree if the repository has none yet:
     </p>
+    <div class="setcmd" style="overflow-x:auto">
+      <span class="cmd" style="white-space:nowrap">uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1</span>
+    </div>
     <p style="font-size:15px; color:var(--color-muted);">
-      The <a href="https://github.com/KeunwooPark/cluedoc#on-every-pull-request">setup notes</a> cover the three things
-      that decide whether it holds up: the re-trigger loop, pull requests from forks, and how to resolve a conflict in
-      a generated paper.
+      The <a href="https://github.com/KeunwooPark/cluedoc#github-action">setup notes</a> cover what it decides for you
+      &mdash; the re-trigger loop, and conflicts in generated prose &mdash; and the one thing you still decide, which
+      is what to do about pull requests from forks.
     </p>
 
     <h2>Conclusion</h2>

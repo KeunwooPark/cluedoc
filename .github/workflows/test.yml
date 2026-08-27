@@ -8,9 +8,9 @@ name: Test
 on:
   push:
     branches: [main]
-    paths: ["action.yml", ".github/tests/**", ".github/workflows/test.yml"]
+    paths: ["action.yml", "README.md", "docs/**", ".github/tests/**", ".github/workflows/test.yml"]
   pull_request:
-    paths: ["action.yml", ".github/tests/**", ".github/workflows/test.yml"]
+    paths: ["action.yml", "README.md", "docs/**", ".github/tests/**", ".github/workflows/test.yml"]
   workflow_dispatch:
 
 jobs:
