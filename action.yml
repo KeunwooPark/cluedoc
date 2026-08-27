@@ -9,13 +9,19 @@ branding:
 inputs:
   api_key:
     description: >-
-      Anthropic API key, or a key for a gateway that speaks the Anthropic
-      Messages API.
+      API key for the model provider, sent as `Authorization: Bearer`.
     required: true
-  model:
-    description: Model the agent runs on.
+  base_url:
+    description: >-
+      Base URL of any endpoint that speaks OpenAI chat completions —
+      your own gateway, a hosted one, or a provider's compatibility endpoint.
+      `/chat/completions` is appended to it.
     required: false
-    default: claude-sonnet-5
+    default: https://api.openai.com/v1
+  model:
+    description: Model the agent runs on, named as the provider names it.
+    required: false
+    default: gpt-5
   scope:
     description: >-
       Explicit git diff range to document, e.g. `main...HEAD`. Inferred from the
@@ -46,8 +52,21 @@ inputs:
       agent-instructions file; `skip` does nothing and exits clean.
     required: false
     default: auto
-  claude_args:
-    description: Extra arguments appended to the Claude Code invocation.
+  max_turns:
+    description: >-
+      How many times the agent may call tools before the run is abandoned. Raise
+      it for a large first bootstrap; the default is ample for a scoped sync.
+    required: false
+    default: "30"
+  max_tokens:
+    description: >-
+      Cap on the tokens the model may produce per turn. Left unset by default,
+      because several current models reject the parameter outright.
+    required: false
+    default: ""
+  temperature:
+    description: >-
+      Sampling temperature. Left unset by default, for the same reason.
     required: false
     default: ""
 
@@ -121,9 +140,17 @@ runs:
       run: |
         set -euo pipefail
 
+        # Every step after this one reads the repository: the engine to
+        # document it, the commit step to push it. Without a checkout they fail
+        # one after another, and none of the errors names the missing step.
+        if [ ! -d "${GITHUB_WORKSPACE}/.git" ]; then
+          echo "::warning::No git checkout in the workspace. Add actions/checkout before this action."
+        fi
+
         if [ -d "${GITHUB_WORKSPACE}/.cluedoc" ] && [ -n "$(ls -A "${GITHUB_WORKSPACE}/.cluedoc" 2>/dev/null)" ]; then
           echo "mode=sync" >> "$GITHUB_OUTPUT"
           echo "paths=.cluedoc" >> "$GITHUB_OUTPUT"
+          echo "write_scope=.cluedoc" >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
@@ -138,6 +165,10 @@ runs:
             # outside .cluedoc/ and everything it touches is staged.
             echo "mode=bootstrap-full" >> "$GITHUB_OUTPUT"
             echo "paths=-A" >> "$GITHUB_OUTPUT"
+            # Empty rather than absent: the engine reads an empty write scope as
+            # "the whole tree", which is exactly what Job 2 needs and what no
+            # other mode is allowed.
+            echo "write_scope=" >> "$GITHUB_OUTPUT"
             echo "job2=Also do Job 2 — wire the sync trigger into the agent-instructions file." >> "$GITHUB_OUTPUT"
             ;;
           auto|"")
@@ -147,6 +178,7 @@ runs:
             # derived, and an agent-instructions file is not.
             echo "mode=bootstrap" >> "$GITHUB_OUTPUT"
             echo "paths=.cluedoc" >> "$GITHUB_OUTPUT"
+            echo "write_scope=.cluedoc" >> "$GITHUB_OUTPUT"
             echo "job2=Do NOT do Job 2. Do not create or modify AGENTS.md, CLAUDE.md, or any other agent-instructions file. Write nothing outside .cluedoc/." >> "$GITHUB_OUTPUT"
             ;;
           *)
@@ -199,7 +231,6 @@ runs:
 
         if [ -z "$range" ]; then
           echo "range=" >> "$GITHUB_OUTPUT"
-          echo "scope=the whole repository" >> "$GITHUB_OUTPUT"
           echo "empty=false" >> "$GITHUB_OUTPUT"
           echo "Cluedoc scope: the whole repository."
           exit 0
@@ -214,7 +245,6 @@ runs:
         fi
 
         echo "range=${range}" >> "$GITHUB_OUTPUT"
-        echo "scope=\`git diff --name-only ${range}\`" >> "$GITHUB_OUTPUT"
 
         # Nothing changed: stop before spending a single token. Common on merge
         # commits and on pushes that only touch tags.
@@ -227,89 +257,108 @@ runs:
           echo "Cluedoc scope: ${changed} changed file(s) in ${range}."
         fi
 
-    # ------------------------------------------------------------------- skill
-    # From this checkout, never a fresh clone. `$GITHUB_ACTION_PATH` is this
-    # repository at the ref the caller pinned, so the skill and the prompt that
-    # drives it are the same version by construction.
-    - name: Install the Cluedoc skill
+    # ------------------------------------------------------------------ prompt
+    # Both prompts, in full, in one step — a prompt is the part of this action
+    # most worth being able to read without executing it.
+    #
+    # The skill itself is not copied anywhere: the engine reads it straight out
+    # of `$GITHUB_ACTION_PATH`, which is this repository at the ref the caller
+    # pinned, so the skill and the prompt that drives it are the same version by
+    # construction rather than by a clone that could drift.
+    #
+    # The heredocs interpolate, which is why neither prompt contains a backtick.
+    - id: prompt
+      name: Compose the prompt
       if: steps.mode.outputs.mode == 'sync' && steps.scope.outputs.empty != 'true' || startsWith(steps.mode.outputs.mode, 'bootstrap')
       shell: bash
+      env:
+        MODE: ${{ steps.mode.outputs.mode }}
+        RANGE: ${{ steps.scope.outputs.range }}
+        JOB2: ${{ steps.mode.outputs.job2 }}
       run: |
         set -euo pipefail
-        dest="${GITHUB_WORKSPACE}/.claude/skills/cluedoc"
-        mkdir -p "$dest"
+        file="${RUNNER_TEMP:-/tmp}/cluedoc-prompt.md"
 
-        # Copied by exclusion rather than by listing what the skill contains:
-        # an extra file in the skill directory is harmless, a missing bundled
-        # resource is a skill that silently misbehaves.
-        tar -C "$GITHUB_ACTION_PATH" \
-          --exclude=./.git --exclude=./.github --exclude=./docs --exclude=./examples \
-          --exclude=./action.yml --exclude=./README.md --exclude=./LICENSE \
-          -cf - . | tar -C "$dest" -xf -
+        if [ "$MODE" = "sync" ]; then
+          # The engine has a git_diff tool, so the range is handed over as data
+          # for the agent to call rather than as a shell command to imitate.
+          if [ -n "$RANGE" ]; then
+            scope="The changes to document are the git range ${RANGE}. Start by calling git_diff with that range and name_only set, then read the files it lists."
+          else
+            scope="There is no diff range: consider the repository as a whole."
+          fi
 
-        # Local-only, so the agent's `git status` stays clean and the skill it
-        # is running cannot end up committed to the caller's repository.
-        if [ -d "${GITHUB_WORKSPACE}/.git" ]; then
-          echo "/.claude/skills/cluedoc/" >> "${GITHUB_WORKSPACE}/.git/info/exclude"
+          cat > "$file" <<EOF
+        Use the Cluedoc skill to sync .cluedoc/ with the code that changed.
+
+        ${scope}
+
+        Follow Cluedoc's progressive rule: update only the papers those changes
+        affect, upward and downward. Do not re-document the repository, and do
+        not rewrite a paper the change does not reach. If nothing needs
+        changing, change nothing and say so.
+        EOF
         else
-          echo "::warning::No git checkout in the workspace. Add actions/checkout before this step."
+          cat > "$file" <<EOF
+        This repository has no .cluedoc/ yet. Run the Cluedoc skill's init
+        command to bootstrap it.
+
+        Do Job 1, the shallow breadth-first starter tree: the root paper at
+        .cluedoc/README.md plus one paper per top-level feature. Do not recurse
+        past the top level.
+
+        ${JOB2}
+        EOF
         fi
 
+        echo "file=${file}" >> "$GITHUB_OUTPUT"
+        echo "::group::Cluedoc prompt"
+        cat "$file"
+        echo "::endgroup::"
+
     # --------------------------------------------------------------------- run
-    # Two prompts rather than one assembled in bash: they say genuinely
-    # different things, and a prompt is the part of this action most worth
-    # being able to read without executing it.
-    #
-    # Neither commits. The agent writes files and stops — the step below stages,
-    # commits and pushes, which is what lets this action resolve a paper
-    # conflict, report what changed, and honour `push: false` with one code path
-    # instead of three.
-    - name: Sync papers
-      if: steps.mode.outputs.mode == 'sync' && steps.scope.outputs.empty != 'true'
-      uses: anthropics/claude-code-action@v1
-      with:
-        anthropic_api_key: ${{ inputs.api_key }}
-        github_token: ${{ inputs.github_token }}
-        prompt: |
-          Use the cluedoc skill to sync .cluedoc/ with the code that changed.
+    # The agent writes files and stops. It cannot commit — there is no shell
+    # tool — and the step below stages, commits and pushes, which is what lets
+    # this action resolve a paper conflict, report what changed, and honour
+    # `push: false` with one code path instead of three.
+    - name: Run the agent
+      if: steps.prompt.outputs.file != ''
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        CLUEDOC_API_KEY: ${{ inputs.api_key }}
+        CLUEDOC_BASE_URL: ${{ inputs.base_url }}
+        CLUEDOC_MODEL: ${{ inputs.model }}
+        CLUEDOC_MAX_TURNS: ${{ inputs.max_turns }}
+        CLUEDOC_MAX_TOKENS: ${{ inputs.max_tokens }}
+        CLUEDOC_TEMPERATURE: ${{ inputs.temperature }}
+        CLUEDOC_WORKSPACE: ${{ github.workspace }}
+        CLUEDOC_PROMPT_FILE: ${{ steps.prompt.outputs.file }}
+        CLUEDOC_SKILL_FILE: ${{ github.action_path }}/SKILL.md
+        # Empty on `bootstrap: full`, which is the one mode allowed to write
+        # outside .cluedoc/. Set through an output rather than an inline
+        # conditional: in a GitHub expression the empty string is falsy, so the
+        # obvious `cond && '' || '.cluedoc'` silently yields '.cluedoc' in both
+        # branches.
+        CLUEDOC_WRITE_SCOPE: ${{ steps.mode.outputs.write_scope }}
+      run: |
+        set -euo pipefail
 
-          Scope strictly to ${{ steps.scope.outputs.scope }}.
-          Follow Cluedoc's progressive rule — update only the papers those changes
-          affect, upward and downward. Do not re-document the repository.
+        # The engine is dependency-free and uses global fetch, so the only thing
+        # it needs is a Node new enough to have one. Checked here because the
+        # failure otherwise is a ReferenceError from inside a file the caller
+        # did not write.
+        if ! command -v node >/dev/null 2>&1; then
+          echo "::error::node was not found on PATH. Add actions/setup-node before this action."
+          exit 1
+        fi
+        major=$(node -p 'process.versions.node.split(".")[0]')
+        if [ "$major" -lt 18 ]; then
+          echo "::error::Node ${major} is too old; Cluedoc needs 18 or newer. Add actions/setup-node before this action."
+          exit 1
+        fi
 
-          Write your changes to the working tree and stop. Do not run `git add`,
-          `git commit` or `git push` — committing is handled after you finish.
-          If nothing needs changing, change nothing.
-        claude_args: |
-          --model ${{ inputs.model }}
-          --max-turns 25
-          --allowedTools Read,Write,Edit,Glob,Grep,Bash
-          ${{ inputs.claude_args }}
-
-    - name: Bootstrap papers
-      if: startsWith(steps.mode.outputs.mode, 'bootstrap')
-      uses: anthropics/claude-code-action@v1
-      with:
-        anthropic_api_key: ${{ inputs.api_key }}
-        github_token: ${{ inputs.github_token }}
-        prompt: |
-          This repository has no .cluedoc/ yet. Run the cluedoc skill's `init`
-          command to bootstrap it.
-
-          Do Job 1 — the shallow, breadth-first starter tree: the root paper at
-          .cluedoc/README.md plus one paper per top-level feature. Do not recurse
-          past the top level.
-
-          ${{ steps.mode.outputs.job2 }}
-
-          Write your changes to the working tree and stop. Do not run `git add`,
-          `git commit` or `git push` — committing is handled after you finish.
-        claude_args: |
-          --model ${{ inputs.model }}
-          --max-turns 30
-          --allowedTools Read,Write,Edit,Glob,Grep,Bash
-          ${{ inputs.claude_args }}
-
+        node "${GITHUB_ACTION_PATH}/engine/run.mjs"
     # ------------------------------------------------------------------ commit
     # Everything the agent produced is still in the working tree. This is the
     # only place that touches git history, which is what makes `changed`

@@ -1,0 +1,34 @@
+# Run Cluedoc against your own gateway rather than a model vendor.
+#
+# The action talks OpenAI chat completions and nothing else, so anything that
+# speaks that shape is a valid `base_url`: a self-hosted gateway, a hosted
+# router, a vLLM server on your own hardware, or a vendor's compatibility
+# endpoint. Cluedoc never learns which model answered — it sends a name and a
+# key, and whatever is behind that URL decides what to do with them.
+#
+# Why you might: a gateway is where per-repository budgets, request logging,
+# key rotation and model routing already live. Documentation runs on every pull
+# request, so it is exactly the workload you want inside that, rather than
+# holding a vendor key of its own in every repository that uses it.
+#
+# Copy to .github/workflows/cluedoc.yml, then set the two secrets below.
+
+name: Cluedoc
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+jobs:
+  cluedoc:
+    uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
+    with:
+      # Whatever your gateway serves /chat/completions from. `/chat/completions`
+      # is appended, so give it the base — usually the part ending in /v1.
+      base_url: ${{ vars.CLUEDOC_BASE_URL }}
+      # Named the way that gateway names it, not the way its vendor does.
+      model: ${{ vars.CLUEDOC_MODEL }}
+    secrets:
+      # A gateway key, not a vendor key: the vendor credential stays in the
+      # gateway, and this repository never holds one.
+      api_key: ${{ secrets.CLUEDOC_API_KEY }}

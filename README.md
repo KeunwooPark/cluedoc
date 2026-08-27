@@ -67,12 +67,24 @@ jobs:
   cluedoc:
     uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
     secrets:
-      api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      api_key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-Add an `ANTHROPIC_API_KEY` secret and that is the whole setup. The action works out the diff range from the event, so there is nothing to configure per repository and no `git diff` expression to write. Three ready-made workflows are in [`examples/`](examples/): [`cluedoc-pr.yml`](examples/cluedoc-pr.yml) syncs papers into the PR, [`cluedoc-main.yml`](examples/cluedoc-main.yml) syncs them after a merge, and [`cluedoc-composed.yml`](examples/cluedoc-composed.yml) uses the action directly, `KeunwooPark/cluedoc@v1`, for anyone who wants the papers without the bot commit.
+Add an `OPENAI_API_KEY` secret and that is the whole setup. The action works out the diff range from the event, so there is nothing to configure per repository and no `git diff` expression to write. Four ready-made workflows are in [`examples/`](examples/): [`cluedoc-pr.yml`](examples/cluedoc-pr.yml) syncs papers into the PR, [`cluedoc-main.yml`](examples/cluedoc-main.yml) syncs them after a merge, [`cluedoc-gateway.yml`](examples/cluedoc-gateway.yml) runs it against a gateway of your own, and [`cluedoc-composed.yml`](examples/cluedoc-composed.yml) uses the action directly, `KeunwooPark/cluedoc@v1`, for anyone who wants the papers without the bot commit.
 
 If Changesets is the analogy that brought you here, note the difference: a changeset records intent that cannot be derived from the diff, which is why you write it by hand. A paper can be derived, so nothing needs to be declared — but papers are also mutable shared files rather than append-only ones, which is where the conflict question below comes from.
+
+### Which model runs it
+
+The action carries its own agent rather than wrapping someone else's, and that agent speaks one protocol: OpenAI chat completions. So `base_url` can be any endpoint that answers `POST /chat/completions` — a model vendor, a hosted router, a server on your own hardware, or a gateway you run, which is where per-repository budgets and request logging usually already live. Cluedoc never learns which model answered; it sends a name and a key and reads the reply.
+
+```yaml
+with:
+  base_url: https://your-gateway.example/v1
+  model: whatever-that-gateway-calls-it
+```
+
+Owning the agent also bounds it. It has six tools — read a file, list files, search, write, edit, `git diff` — and no shell, which matters because this job holds a token that can push to your repository. During a normal sync a write outside `.cluedoc/` is refused by the engine rather than merely discouraged in the prompt; `bootstrap: full` is the one mode that opens the rest of the tree, and only because you asked it to.
 
 ### Starting from nothing
 
@@ -112,7 +124,9 @@ With `push: false` the papers are left in the working tree and nothing is commit
 Two things bite organizations rather than individuals, and neither is fixable from inside the action:
 
 - **Action policy.** If your organization restricts which actions may run, allow `KeunwooPark/*` under Settings → Actions → General. Otherwise the run fails before its first step, with an error that does not obviously name the cause.
-- **Pinning.** `@v1` is a moving tag. If your policy requires a pinned SHA, `uses: KeunwooPark/cluedoc@<sha>` works the same way — the skill is installed from that same checkout, so the papers and the prompt that wrote them stay on the version you pinned.
+- **Pinning.** `@v1` is a moving tag. If your policy requires a pinned SHA, `uses: KeunwooPark/cluedoc@<sha>` works the same way — the engine reads the skill straight out of that checkout, so the papers, the prompt that wrote them and the agent that ran it all stay on the version you pinned.
+
+On a self-hosted runner, one more: the engine is a dependency-free Node program, so the runner needs Node 18 or newer on `PATH`. GitHub's hosted runners already have it; if yours does not, add `actions/setup-node` before the action. There is nothing to `npm install` either way.
 
 ## How it works
 

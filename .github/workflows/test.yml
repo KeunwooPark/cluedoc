@@ -1,16 +1,17 @@
-# The action's shell steps decide whether to run, what to document, and where
-# the skill comes from — all before the agent is invoked, and all on event
-# shapes that are awkward to reproduce by pushing a commit. These run them
-# directly. See .github/tests/run.sh.
+# The action's shell steps decide whether to run, what to document and what to
+# say — all before the agent is invoked, and all on event shapes that are
+# awkward to reproduce by pushing a commit. The engine those steps invoke is
+# tested against a stubbed provider, so no key and no network are involved.
+# See .github/tests/run.sh.
 
 name: Test
 
 on:
   push:
     branches: [main]
-    paths: ["action.yml", "README.md", "docs/**", ".github/tests/**", ".github/workflows/test.yml"]
+    paths: ["action.yml", "engine/**", "SKILL.md", "README.md", "docs/**", "examples/**", ".github/tests/**", ".github/workflows/test.yml"]
   pull_request:
-    paths: ["action.yml", "README.md", "docs/**", ".github/tests/**", ".github/workflows/test.yml"]
+    paths: ["action.yml", "engine/**", "SKILL.md", "README.md", "docs/**", "examples/**", ".github/tests/**", ".github/workflows/test.yml"]
   workflow_dispatch:
 
 jobs:

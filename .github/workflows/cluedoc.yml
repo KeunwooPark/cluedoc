@@ -8,7 +8,7 @@
 #     cluedoc:
 #       uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
 #       secrets:
-#         api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+#         api_key: ${{ secrets.OPENAI_API_KEY }}
 #
 # The caller still writes `on:` — a reusable workflow cannot declare its own
 # trigger. See examples/ for the two shapes worth copying.
@@ -18,10 +18,17 @@ name: Cluedoc
 on:
   workflow_call:
     inputs:
+      base_url:
+        description: >-
+          Any endpoint that speaks OpenAI chat completions. Point it at your own
+          gateway to run Cluedoc on a model of your choosing.
+        type: string
+        required: false
+        default: https://api.openai.com/v1
       model:
         type: string
         required: false
-        default: claude-sonnet-5
+        default: gpt-5
       scope:
         description: Explicit diff range; inferred from the event when empty.
         type: string
@@ -37,10 +44,11 @@ on:
         type: string
         required: false
         default: "docs(cluedoc): sync papers"
-      claude_args:
+      max_turns:
+        description: Tool calls the agent may make before the run is abandoned.
         type: string
         required: false
-        default: ""
+        default: "30"
     secrets:
       api_key:
         required: true
@@ -80,8 +88,9 @@ jobs:
       - uses: KeunwooPark/cluedoc@v1
         with:
           api_key: ${{ secrets.api_key }}
+          base_url: ${{ inputs.base_url }}
           model: ${{ inputs.model }}
           scope: ${{ inputs.scope }}
           bootstrap: ${{ inputs.bootstrap }}
           commit_message: ${{ inputs.commit_message }}
-          claude_args: ${{ inputs.claude_args }}
+          max_turns: ${{ inputs.max_turns }}

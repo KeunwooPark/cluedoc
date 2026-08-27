@@ -20,6 +20,13 @@ checkgrep() {
   if grep -qF "$3" "$LAB/$2"; then pass=$((pass+1)); printf '  ok   %-46s matched\n' "$1"
   else fail=$((fail+1)); printf '  FAIL %-46s no %q in %s\n' "$1" "$3" "$2"; fi
 }
+# `check` cannot tell an empty value from an absent key, and for write_scope
+# that is the whole distinction: absent means the engine defaults to .cluedoc,
+# empty means the tree is deliberately open.
+checkline() { # checkline <name> <exact line>
+  if grep -qxF "$2" "$LAB/out"; then pass=$((pass+1)); printf '  ok   %-46s %s\n' "$1" "$2"
+  else fail=$((fail+1)); printf '  FAIL %-46s no line %q in out:\n%s\n' "$1" "$2" "$(cat "$LAB/out")"; fi
+}
 
 echo "== mode =="
 export GITHUB_WORKSPACE="$LAB/ws"
@@ -30,6 +37,7 @@ echo "# root" > "$GITHUB_WORKSPACE/.cluedoc/README.md"
 INPUT_BOOTSTRAP=auto run >/dev/null
 check "existing .cluedoc/ syncs" mode sync
 check "sync stages only papers" paths .cluedoc
+checkline "sync writes only papers" "write_scope=.cluedoc"
 
 # an empty .cluedoc/ is not an initialised repository
 rm -rf "$GITHUB_WORKSPACE"; mkdir -p "$GITHUB_WORKSPACE/.cluedoc"
@@ -41,13 +49,22 @@ rm -rf "$GITHUB_WORKSPACE"; mkdir -p "$GITHUB_WORKSPACE"
 INPUT_BOOTSTRAP=auto run >/dev/null
 check "absent .cluedoc/ bootstraps" mode bootstrap
 check "auto bootstrap stages only papers" paths .cluedoc
+checkline "auto bootstrap writes only papers" "write_scope=.cluedoc"
 checkgrep "auto bootstrap forbids Job 2" out "Do NOT do Job 2"
 checkgrep "auto bootstrap names the files to leave alone" out "AGENTS.md"
 
 INPUT_BOOTSTRAP=full run >/dev/null
 check "full bootstrap" mode bootstrap-full
 check "full bootstrap stages everything" paths -A
+checkline "full bootstrap opens the tree" "write_scope="
 checkgrep "full bootstrap asks for Job 2" out "Also do Job 2"
+
+checkgrep "a missing checkout is called out" stdout "Add actions/checkout"
+mkdir -p "$GITHUB_WORKSPACE/.git"
+INPUT_BOOTSTRAP=auto run >/dev/null
+if grep -qF "Add actions/checkout" "$LAB/stdout"; then
+  fail=$((fail+1)); printf '  FAIL %-46s warned with a checkout present\n' "a present checkout is quiet"
+else pass=$((pass+1)); printf '  ok   %-46s quiet\n' "a present checkout is quiet"; fi
 
 INPUT_BOOTSTRAP=skip run >/dev/null
 check "skip" mode skip

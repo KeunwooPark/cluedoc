@@ -310,7 +310,9 @@ sources:
       <span class="cmd" style="white-space:nowrap">uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1</span>
     </div>
     <p style="font-size:15px; color:var(--color-muted);">
-      The <a href="https://github.com/KeunwooPark/cluedoc#github-action">setup notes</a> cover what it decides for you
+      The action carries its own agent and speaks OpenAI chat completions, so it runs on any endpoint that does &mdash;
+      a vendor, a server of your own, or a gateway you already route through. The
+      <a href="https://github.com/KeunwooPark/cluedoc#github-action">setup notes</a> cover that, what it decides for you
       &mdash; the re-trigger loop, and conflicts in generated prose &mdash; and the one thing you still decide, which
       is what to do about pull requests from forks.
     </p>
