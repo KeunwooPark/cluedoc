@@ -1,12 +1,11 @@
 # Sync Cluedoc papers into every pull request.
 #
-# Cluedoc papers are a generated artifact derived from the code, so this workflow
-# treats them the way you would treat a lockfile or generated API client: the bot
-# writes them into the PR branch, so the docs are reviewed and merged atomically
-# with the change that caused them.
+# Papers are a generated artifact derived from the code, so this treats them the
+# way you would treat a lockfile or a generated API client: the bot writes them
+# into the PR branch, so the docs are reviewed and merged atomically with the
+# change that caused them.
 #
 # Copy to .github/workflows/cluedoc.yml and add an ANTHROPIC_API_KEY secret.
-# See the README for the three caveats (loop, forks, conflicts).
 
 name: Cluedoc
 
@@ -14,48 +13,13 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review]
 
-# One run per PR; a new push cancels the run still working on the old commit.
-concurrency:
-  group: cluedoc-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
-  sync:
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.sender.login != 'github-actions[bot]' &&
-      github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0 # the agent needs base..head to scope the diff
-
-      - name: Install the Cluedoc skill
-        run: git clone --depth 1 https://github.com/KeunwooPark/cluedoc.git .claude/skills/cluedoc
-
-      - uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Push as GITHUB_TOKEN: a `synchronize` it causes needs manual approval
-          # to run, so the doc commit cannot re-trigger this workflow.
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt: |
-            Use the cluedoc skill to sync .cluedoc/ with the changes in this PR.
-
-            Scope strictly to `git diff --name-only origin/${{ github.base_ref }}...HEAD`.
-            Follow Cluedoc's progressive rule — update only the papers those changes
-            affect, upward and downward. Do not re-document the repository.
-
-            If nothing needs changing, make no commit and stop.
-            Otherwise commit only .cluedoc/** to this PR branch as
-            "docs(cluedoc): sync papers" and push.
-          claude_args: |
-            --model claude-sonnet-5
-            --max-turns 25
-            --allowedTools Read,Write,Edit,Glob,Grep,Bash
+  cluedoc:
+    uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
+    secrets:
+      api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    # Only needed if this repository's default GITHUB_TOKEN is read-only:
+    # a called workflow cannot be granted more than its caller holds.
+    # permissions:
+    #   contents: write
+    #   pull-requests: write

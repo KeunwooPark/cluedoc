@@ -1,0 +1,26 @@
+# The action's shell steps decide whether to run, what to document, and where
+# the skill comes from — all before the agent is invoked, and all on event
+# shapes that are awkward to reproduce by pushing a commit. These run them
+# directly. See .github/tests/run.sh.
+
+name: Test
+
+on:
+  push:
+    branches: [main]
+    paths: ["action.yml", ".github/tests/**", ".github/workflows/test.yml"]
+  pull_request:
+    paths: ["action.yml", ".github/tests/**", ".github/workflows/test.yml"]
+  workflow_dispatch:
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Run the action's step tests
+        run: .github/tests/run.sh

@@ -69,7 +69,26 @@ For hands-off updates, wire it into a commit hook or a CI step that invokes the 
 
 ## On every pull request
 
-Papers are a generated artifact derived from the code, so the way to automate them is the way you already automate a lockfile or a generated API client: let a bot write them into the pull request branch, so the docs are reviewed and merged atomically with the change that caused them. Two workflows are in [`examples/`](examples/) — [`cluedoc-pr.yml`](examples/cluedoc-pr.yml) syncs papers into the PR, and [`cluedoc-main.yml`](examples/cluedoc-main.yml) syncs them after a merge. Copy either into `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret, and the agent runs Cluedoc against the PR's diff and pushes the papers it changed. If Changesets is the analogy that brought you here, note the difference: a changeset records intent that cannot be derived from the diff, which is why you write it by hand. A paper can be derived, so nothing needs to be declared — but papers are also mutable shared files rather than append-only ones, which is where the third caveat below comes from.
+Papers are a generated artifact derived from the code, so the way to automate them is the way you already automate a lockfile or a generated API client: let a bot write them into the pull request branch, so the docs are reviewed and merged atomically with the change that caused them.
+
+```yaml
+name: Cluedoc
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+jobs:
+  cluedoc:
+    uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
+    secrets:
+      api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Add an `ANTHROPIC_API_KEY` secret and the agent runs Cluedoc against the PR's diff and pushes the papers it changed. It works out the diff range from the event, so there is nothing to configure per repository. Three ready-made workflows are in [`examples/`](examples/): [`cluedoc-pr.yml`](examples/cluedoc-pr.yml) syncs papers into the PR, [`cluedoc-main.yml`](examples/cluedoc-main.yml) syncs them after a merge, and [`cluedoc-composed.yml`](examples/cluedoc-composed.yml) uses the action directly — `KeunwooPark/cluedoc@v1` — for anyone who wants the papers without the bot commit.
+
+If your organization restricts which actions may run, allow `KeunwooPark/*` under Settings → Actions → General; otherwise the run fails before its first step.
+
+If Changesets is the analogy that brought you here, note the difference: a changeset records intent that cannot be derived from the diff, which is why you write it by hand. A paper can be derived, so nothing needs to be declared — but papers are also mutable shared files rather than append-only ones, which is where the third caveat below comes from.
 
 Three things decide whether this holds up in practice.
 

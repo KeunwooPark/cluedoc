@@ -1,0 +1,39 @@
+# Cluedoc as one step of a job you already have.
+#
+# The reusable workflow in the other two examples commits and pushes for you.
+# Use the action directly when you want the papers but not the bot: `push:
+# false` leaves them in the working tree for whatever comes next — a separate
+# pull request, a failing check, an artifact upload.
+#
+# This is also the shape to copy if you need a runner, a checkout or a set of
+# permissions the reusable workflow does not offer.
+
+name: Docs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: KeunwooPark/cluedoc@v1
+        id: cluedoc
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          push: false
+          scope: all # workflow_dispatch has no diff to infer; document everything
+
+      - name: Open a pull request with the papers
+        uses: peter-evans/create-pull-request@v6
+        with:
+          add-paths: .cluedoc/**
+          branch: cluedoc/sync
+          title: "docs(cluedoc): sync papers"
+          commit-message: "docs(cluedoc): sync papers"
