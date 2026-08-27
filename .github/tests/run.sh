@@ -22,9 +22,13 @@ python3 "$HERE/extract.py" "$ROOT/action.yml" "$WORK/steps" || exit 1
 echo
 
 rc=0
-STEPS="$WORK/steps" WORK="$WORK" bash "$HERE/steps.sh" || rc=1
-echo
-STEPS="$WORK/steps" WORK="$WORK" bash "$HERE/install.sh" "$ROOT" || rc=1
+for suite in steps mode install commit comment; do
+  case "$suite" in
+    install) STEPS="$WORK/steps" WORK="$WORK" bash "$HERE/install.sh" "$ROOT" || rc=1 ;;
+    *)       STEPS="$WORK/steps" WORK="$WORK" bash "$HERE/$suite.sh" || rc=1 ;;
+  esac
+  echo
+done
 
 echo
 if [ "$rc" = 0 ]; then echo "all suites passed"; else echo "FAILURES"; fi

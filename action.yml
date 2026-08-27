@@ -39,10 +39,28 @@ inputs:
     description: Commit message for the docs commit.
     required: false
     default: "docs(cluedoc): sync papers"
+  bootstrap:
+    description: >-
+      What to do in a repository that has no `.cluedoc/` yet. `auto` writes the
+      starter tree of papers; `full` also wires the sync trigger into the repo's
+      agent-instructions file; `skip` does nothing and exits clean.
+    required: false
+    default: auto
   claude_args:
     description: Extra arguments appended to the Claude Code invocation.
     required: false
     default: ""
+
+outputs:
+  changed:
+    description: '"true" when papers were written, "false" otherwise.'
+    value: ${{ steps.commit.outputs.changed }}
+  papers:
+    description: Newline-separated paths of the papers that changed.
+    value: ${{ steps.commit.outputs.papers }}
+  commit:
+    description: SHA of the docs commit; empty when nothing changed.
+    value: ${{ steps.commit.outputs.commit }}
 
 runs:
   using: composite
@@ -91,29 +109,64 @@ runs:
           echo "skip=false" >> "$GITHUB_OUTPUT"
         fi
 
+    # ------------------------------------------------------------------- mode
+    # A repository with no `.cluedoc/` cannot be synced — there is no tree for a
+    # diff to update. The skill has a different entry point for that, and this
+    # is what reaches it.
+    - id: mode
+      if: steps.preflight.outputs.skip != 'true'
+      shell: bash
+      env:
+        INPUT_BOOTSTRAP: ${{ inputs.bootstrap }}
+      run: |
+        set -euo pipefail
+
+        if [ -d "${GITHUB_WORKSPACE}/.cluedoc" ] && [ -n "$(ls -A "${GITHUB_WORKSPACE}/.cluedoc" 2>/dev/null)" ]; then
+          echo "mode=sync" >> "$GITHUB_OUTPUT"
+          echo "paths=.cluedoc" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        case "$INPUT_BOOTSTRAP" in
+          skip)
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "No .cluedoc/ in this repository, and bootstrap is set to skip." >> "$GITHUB_STEP_SUMMARY"
+            echo "No .cluedoc/ in this repository, and bootstrap is set to skip."
+            ;;
+          full)
+            # The caller asked for the trigger wire-up, so the agent may write
+            # outside .cluedoc/ and everything it touches is staged.
+            echo "mode=bootstrap-full" >> "$GITHUB_OUTPUT"
+            echo "paths=-A" >> "$GITHUB_OUTPUT"
+            echo "job2=Also do Job 2 — wire the sync trigger into the agent-instructions file." >> "$GITHUB_OUTPUT"
+            ;;
+          auto|"")
+            # Papers only. `init`'s second job writes a block into AGENTS.md,
+            # and that is a different kind of edit than a generated paper: the
+            # argument for letting a bot commit papers unasked is that they are
+            # derived, and an agent-instructions file is not.
+            echo "mode=bootstrap" >> "$GITHUB_OUTPUT"
+            echo "paths=.cluedoc" >> "$GITHUB_OUTPUT"
+            echo "job2=Do NOT do Job 2. Do not create or modify AGENTS.md, CLAUDE.md, or any other agent-instructions file. Write nothing outside .cluedoc/." >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "::error::Unknown bootstrap value '${INPUT_BOOTSTRAP}'. Expected auto, full or skip."
+            exit 1
+            ;;
+        esac
+
     # ------------------------------------------------------------------- scope
     # The examples hand-wrote a different `git diff` into each workflow's prompt.
     # Deriving it here is what lets a caller write no diff expression at all.
     - id: scope
-      if: steps.preflight.outputs.skip != 'true'
+      if: steps.mode.outputs.mode == 'sync'
       shell: bash
       env:
         INPUT_SCOPE: ${{ inputs.scope }}
-        INPUT_PUSH: ${{ inputs.push }}
-        INPUT_COMMIT_MESSAGE: ${{ inputs.commit_message }}
       run: |
         set -euo pipefail
         range=""
 
-        # What the agent is told to do with its result. Assembled here rather
-        # than as an expression in the prompt: a conditional that spans lines
-        # inside a block scalar is a runtime-only failure, and nothing below the
-        # runner would catch it.
-        if [ "$INPUT_PUSH" = "true" ]; then
-          echo "finish=If nothing needs changing, make no commit and stop. Otherwise commit only .cluedoc/** as \"${INPUT_COMMIT_MESSAGE}\" and push to the current branch." >> "$GITHUB_OUTPUT"
-        else
-          echo "finish=Leave every change in the working tree. Do not commit and do not push." >> "$GITHUB_OUTPUT"
-        fi
 
         if [ "$INPUT_SCOPE" = "all" ]; then
           range=""
@@ -179,7 +232,7 @@ runs:
     # repository at the ref the caller pinned, so the skill and the prompt that
     # drives it are the same version by construction.
     - name: Install the Cluedoc skill
-      if: steps.preflight.outputs.skip != 'true' && steps.scope.outputs.empty != 'true'
+      if: steps.mode.outputs.mode == 'sync' && steps.scope.outputs.empty != 'true' || startsWith(steps.mode.outputs.mode, 'bootstrap')
       shell: bash
       run: |
         set -euo pipefail
@@ -203,8 +256,16 @@ runs:
         fi
 
     # --------------------------------------------------------------------- run
+    # Two prompts rather than one assembled in bash: they say genuinely
+    # different things, and a prompt is the part of this action most worth
+    # being able to read without executing it.
+    #
+    # Neither commits. The agent writes files and stops — the step below stages,
+    # commits and pushes, which is what lets this action resolve a paper
+    # conflict, report what changed, and honour `push: false` with one code path
+    # instead of three.
     - name: Sync papers
-      if: steps.preflight.outputs.skip != 'true' && steps.scope.outputs.empty != 'true'
+      if: steps.mode.outputs.mode == 'sync' && steps.scope.outputs.empty != 'true'
       uses: anthropics/claude-code-action@v1
       with:
         anthropic_api_key: ${{ inputs.api_key }}
@@ -216,9 +277,204 @@ runs:
           Follow Cluedoc's progressive rule — update only the papers those changes
           affect, upward and downward. Do not re-document the repository.
 
-          ${{ steps.scope.outputs.finish }}
+          Write your changes to the working tree and stop. Do not run `git add`,
+          `git commit` or `git push` — committing is handled after you finish.
+          If nothing needs changing, change nothing.
         claude_args: |
           --model ${{ inputs.model }}
           --max-turns 25
           --allowedTools Read,Write,Edit,Glob,Grep,Bash
           ${{ inputs.claude_args }}
+
+    - name: Bootstrap papers
+      if: startsWith(steps.mode.outputs.mode, 'bootstrap')
+      uses: anthropics/claude-code-action@v1
+      with:
+        anthropic_api_key: ${{ inputs.api_key }}
+        github_token: ${{ inputs.github_token }}
+        prompt: |
+          This repository has no .cluedoc/ yet. Run the cluedoc skill's `init`
+          command to bootstrap it.
+
+          Do Job 1 — the shallow, breadth-first starter tree: the root paper at
+          .cluedoc/README.md plus one paper per top-level feature. Do not recurse
+          past the top level.
+
+          ${{ steps.mode.outputs.job2 }}
+
+          Write your changes to the working tree and stop. Do not run `git add`,
+          `git commit` or `git push` — committing is handled after you finish.
+        claude_args: |
+          --model ${{ inputs.model }}
+          --max-turns 30
+          --allowedTools Read,Write,Edit,Glob,Grep,Bash
+          ${{ inputs.claude_args }}
+
+    # ------------------------------------------------------------------ commit
+    # Everything the agent produced is still in the working tree. This is the
+    # only place that touches git history, which is what makes `changed`
+    # trustworthy and lets a paper conflict be resolved rather than reported.
+    - id: commit
+      if: steps.mode.outputs.mode == 'sync' && steps.scope.outputs.empty != 'true' || startsWith(steps.mode.outputs.mode, 'bootstrap')
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_PUSH: ${{ inputs.push }}
+        INPUT_COMMIT_MESSAGE: ${{ inputs.commit_message }}
+        PATHS: ${{ steps.mode.outputs.paths }}
+        BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+      run: |
+        set -euo pipefail
+        papers=""
+
+        # Every exit goes through here, so each output is written exactly once.
+        # Appending a second `changed=` and relying on last-one-wins is legal,
+        # unreadable, and makes the step untestable without knowing that rule.
+        finish() { # finish <changed> <commit-sha>
+          {
+            echo "changed=$1"
+            echo "commit=$2"
+            echo "papers<<CLUEDOC_EOF"
+            [ -n "$papers" ] && echo "$papers"
+            echo "CLUEDOC_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        }
+
+        if [ "$PATHS" = "-A" ]; then
+          git add -A
+        else
+          # Only the papers. The agent was told to write nothing else, and a
+          # scoped `add` is what makes that instruction enforced rather than
+          # merely requested.
+          stray=$(git status --porcelain -- ':(exclude).cluedoc' | wc -l | tr -d ' ')
+          if [ "$stray" != "0" ]; then
+            echo "::warning::The agent changed ${stray} file(s) outside .cluedoc/. They were left uncommitted."
+          fi
+          git add -- .cluedoc
+        fi
+
+        papers=$(git diff --cached --name-only)
+        if [ -z "$papers" ]; then
+          echo "Cluedoc: no papers needed changing." >> "$GITHUB_STEP_SUMMARY"
+          echo "Cluedoc: no papers needed changing."
+          finish false ""
+        fi
+
+        count=$(echo "$papers" | wc -l | tr -d ' ')
+
+        if [ "$INPUT_PUSH" != "true" ]; then
+          git restore --staged .
+          echo "Cluedoc: left ${count} paper(s) in the working tree." >> "$GITHUB_STEP_SUMMARY"
+          finish true ""
+        fi
+
+        git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "$INPUT_COMMIT_MESSAGE"
+        dropped=false
+
+        # Stray edits are not part of the result, but they would stop a rebase
+        # dead with "cannot rebase: You have unstaged changes" — turning a
+        # recoverable race into a failed run, for files nobody was going to
+        # keep. Discarded here rather than before the commit, so the warning
+        # above still reports what the agent actually did.
+        git checkout -- . 2>/dev/null || true
+
+        if ! git push -q origin "HEAD:${BRANCH}" 2>/dev/null; then
+          # Somebody pushed while the agent was working. Rebase rather than
+          # force: their commit is real work and ours is regenerable.
+          git fetch -q origin "$BRANCH"
+
+          if ! git rebase -q "origin/${BRANCH}" >/dev/null 2>&1; then
+            unmerged=$(git diff --name-only --diff-filter=U)
+            outside=$(echo "$unmerged" | grep -v '^\.cluedoc/' || true)
+
+            if [ -n "$outside" ]; then
+              git rebase --abort || true
+              echo "::error::Conflict outside .cluedoc/ while rebasing onto ${BRANCH}. Cluedoc will not resolve that."
+              exit 1
+            fi
+
+            # Papers are derived, so the losing side is not lost work — it is
+            # work the next sync redoes from the code. During a rebase `--ours`
+            # is the branch being rebased ONTO, which is what the remote already
+            # has. This is the README's manual recipe, automated.
+            echo "$unmerged" | while IFS= read -r f; do
+              [ -n "$f" ] && git checkout --ours -- "$f"
+            done
+            git add -- .cluedoc
+
+            # Taking the remote's version can leave nothing to commit: the
+            # papers already say what ours would have said.
+            if ! GIT_EDITOR=true git rebase --continue >/dev/null 2>&1; then
+              GIT_EDITOR=true git rebase --skip >/dev/null 2>&1
+            fi
+
+            echo "Cluedoc: a paper conflicted with ${BRANCH} and the branch's version was kept. The next sync regenerates it." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Did our commit survive the rebase? Asked by position rather than by
+          # SHA: a rebase rewrites the commit, so comparing the SHA we made
+          # against HEAD reports every successful rebase as a drop. Landing
+          # exactly on the remote's tip means there is nothing of ours left —
+          # either the conflict resolution emptied it, or the branch already
+          # said what we were going to say.
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/${BRANCH}")" ]; then
+            dropped=true
+          else
+            git push -q origin "HEAD:${BRANCH}"
+          fi
+        fi
+
+        if [ "$dropped" = "true" ]; then
+          echo "Cluedoc: the sync was superseded by ${BRANCH} and produced no commit." >> "$GITHUB_STEP_SUMMARY"
+          papers=""
+          finish false ""
+        fi
+
+        {
+          echo "Cluedoc synced ${count} paper(s):"
+          echo "$papers" | sed 's/^/- /'
+        } >> "$GITHUB_STEP_SUMMARY"
+        finish true "$(git rev-parse HEAD)"
+
+    # ----------------------------------------------------------------- comment
+    # One comment per pull request, rewritten in place. Silent when nothing
+    # changed: a bot that comments on every PR that touched a test file trains
+    # people to filter it, and then it goes unread on the PR where it mattered.
+    - name: Comment on the pull request
+      if: github.event_name == 'pull_request' && steps.commit.outputs.changed == 'true' && steps.commit.outputs.commit != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PAPERS: ${{ steps.commit.outputs.papers }}
+        SHA: ${{ steps.commit.outputs.commit }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        marker='<!-- cluedoc:action -->'
+
+        count=$(echo "$PAPERS" | wc -l | tr -d ' ')
+        {
+          echo "$marker"
+          echo "**Cluedoc** synced ${count} paper(s)."
+          echo
+          # Linked at the docs commit, not at the branch: a branch link goes
+          # stale the moment the pull request moves on, and these links exist to
+          # be read as rendered Markdown rather than as a prose diff.
+          echo "$PAPERS" | while IFS= read -r f; do
+            [ -n "$f" ] && echo "- [\`${f}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${SHA}/${f})"
+          done
+        } > "${RUNNER_TEMP:-/tmp}/cluedoc-comment.md"
+
+        existing=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate \
+          --jq "[.[] | select(.body | startswith(\"${marker}\"))] | .[0].id // empty" 2>/dev/null || true)
+
+        if [ -n "$existing" ]; then
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" \
+            -F body=@"${RUNNER_TEMP:-/tmp}/cluedoc-comment.md" --silent
+        else
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+            -F body=@"${RUNNER_TEMP:-/tmp}/cluedoc-comment.md" --silent
+        fi
