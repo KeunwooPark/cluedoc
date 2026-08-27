@@ -96,13 +96,27 @@ Three things decide whether this holds up in practice.
 
 **Forks.** A pull request from a fork gets no secrets and a read-only token, so the agent cannot run at all. The PR workflow skips those rather than failing on them, which means fork contributions merge with stale papers unless you also run the `main` workflow to catch them on the way in. If you take outside contributions, run both.
 
-**Conflicts.** Two open pull requests that touch the same feature will both rewrite that feature's paper and conflict, in generated prose. Do not resolve it by hand. Take the base branch's version and let the next sync regenerate:
-
-```bash
-git checkout --theirs .cluedoc/ && git add .cluedoc/
-```
+**Conflicts.** Two open pull requests that touch the same feature will both rewrite that feature's paper and conflict, in generated prose. The action resolves this itself: it keeps the branch's version and lets the next sync regenerate, because the losing side is not lost work — it is work that will be redone from the code in a moment. That reasoning only holds inside `.cluedoc/`, so a conflict anywhere else stops the run for a human.
 
 Optionally add `.cluedoc/** linguist-generated=true` to `.gitattributes`, so papers collapse by default in the PR diff and reviewers expand only the ones they care about.
+
+## Starting from nothing
+
+Run the action on a repository with no `.cluedoc/` and it bootstraps instead of syncing: a root paper plus one per top-level feature, the same shallow starter tree `/cluedoc init` writes.
+
+It stops there. `init`'s second job wires a sync-trigger block into your `AGENTS.md`, and that is a different kind of edit from a generated paper — the argument for letting a bot commit papers unasked is that papers are derived, and an agent-instructions file is not. Run `/cluedoc init` locally for that, or pass `bootstrap: full` if you would rather the action did it.
+
+## Composing it
+
+The action reports what it did, so Cluedoc can be a step in a job you already have rather than a bot that commits:
+
+| Output | |
+| --- | --- |
+| `changed` | `true` when papers were written |
+| `papers` | newline-separated paths |
+| `commit` | SHA of the docs commit, empty when nothing changed |
+
+With `push: false` the papers are left in the working tree and nothing is committed — see [`cluedoc-composed.yml`](examples/cluedoc-composed.yml), which opens a pull request with them instead.
 
 ## License
 

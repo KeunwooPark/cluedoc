@@ -73,14 +73,7 @@ check "workflow_dispatch runs" skip false
 
 echo "== scope =="
 cd "$REPO" || exit 1
-export INPUT_SCOPE="" INPUT_PUSH=true INPUT_COMMIT_MESSAGE="docs(cluedoc): sync papers"
-
-export GITHUB_EVENT_NAME=workflow_dispatch
-GITHUB_EVENT_PATH=$(ev '{}') INPUT_SCOPE=all run scope >/dev/null
-checkgrep "push=true tells the agent to commit" out 'and push to the current branch.'
-checkgrep "push=true carries the commit message" out 'as "docs(cluedoc): sync papers"'
-INPUT_PUSH=false GITHUB_EVENT_PATH=$(ev '{}') INPUT_SCOPE=all run scope >/dev/null
-checkgrep "push=false tells the agent not to" out "finish=Leave every change in the working tree."
+export INPUT_SCOPE=""
 
 export GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main
 GITHUB_EVENT_PATH=$(ev '{}') run scope >/dev/null

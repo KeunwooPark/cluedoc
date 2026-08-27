@@ -27,6 +27,12 @@ on:
         type: string
         required: false
         default: ""
+      bootstrap:
+        description: >-
+          What to do in a repository with no `.cluedoc/` yet: auto, full or skip.
+        type: string
+        required: false
+        default: auto
       commit_message:
         type: string
         required: false
@@ -76,5 +82,6 @@ jobs:
           api_key: ${{ secrets.api_key }}
           model: ${{ inputs.model }}
           scope: ${{ inputs.scope }}
+          bootstrap: ${{ inputs.bootstrap }}
           commit_message: ${{ inputs.commit_message }}
           claude_args: ${{ inputs.claude_args }}

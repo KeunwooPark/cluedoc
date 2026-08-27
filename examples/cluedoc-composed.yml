@@ -30,10 +30,17 @@ jobs:
           push: false
           scope: all # workflow_dispatch has no diff to infer; document everything
 
+      # `changed` is why the action reports its result rather than only acting on
+      # it: nothing below runs on a sync that found nothing to say.
       - name: Open a pull request with the papers
+        if: steps.cluedoc.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           add-paths: .cluedoc/**
           branch: cluedoc/sync
           title: "docs(cluedoc): sync papers"
           commit-message: "docs(cluedoc): sync papers"
+          body: |
+            Papers updated by Cluedoc:
+
+            ${{ steps.cluedoc.outputs.papers }}
