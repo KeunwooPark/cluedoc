@@ -1,0 +1,224 @@
+name: Cluedoc
+description: Keep .cluedoc/ papers in sync with the code that changed, on every pull request.
+author: keunwoo
+
+branding:
+  icon: book-open
+  color: blue
+
+inputs:
+  api_key:
+    description: >-
+      Anthropic API key, or a key for a gateway that speaks the Anthropic
+      Messages API.
+    required: true
+  model:
+    description: Model the agent runs on.
+    required: false
+    default: claude-sonnet-5
+  scope:
+    description: >-
+      Explicit git diff range to document, e.g. `main...HEAD`. Inferred from the
+      event when empty; pass `all` to document the whole repository.
+    required: false
+    default: ""
+  github_token:
+    description: >-
+      Token the agent pushes with. Leave as the default `GITHUB_TOKEN`: a
+      `synchronize` it causes requires manual approval to run, which is what
+      stops the docs commit re-triggering this workflow.
+    required: false
+    default: ${{ github.token }}
+  push:
+    description: >-
+      Commit and push the papers. Set false to leave them in the working tree
+      for a following step to deal with.
+    required: false
+    default: "true"
+  commit_message:
+    description: Commit message for the docs commit.
+    required: false
+    default: "docs(cluedoc): sync papers"
+  claude_args:
+    description: Extra arguments appended to the Claude Code invocation.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # ---------------------------------------------------------------- preflight
+    # Three situations where running is wrong rather than merely unnecessary.
+    # Each exits clean and says why in the run summary: a contributor whose fork
+    # PR produced no papers has no other way to find out that is expected.
+    - id: preflight
+      shell: bash
+      run: |
+        set -euo pipefail
+        skip=""
+
+        case "$GITHUB_EVENT_NAME" in
+          pull_request|pull_request_target)
+            head_repo=$(jq -r '.pull_request.head.repo.full_name // ""' "$GITHUB_EVENT_PATH")
+            draft=$(jq -r '.pull_request.draft // false' "$GITHUB_EVENT_PATH")
+
+            # A fork PR gets no secrets and a read-only token, so the agent
+            # cannot run and cannot push. Run the companion workflow on the
+            # default branch to pick these up after the merge instead.
+            if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+              skip="this pull request comes from a fork, where secrets and write access are unavailable"
+            elif [ "$draft" = "true" ]; then
+              skip="this pull request is a draft"
+            fi
+            ;;
+        esac
+
+        # Our own docs commit must not start another run. The token guard above
+        # is the real defence; this is the second one, and the only one that
+        # applies on `push`.
+        if [ -z "$skip" ]; then
+          sender=$(jq -r '.sender.login // ""' "$GITHUB_EVENT_PATH")
+          if [ "$sender" = "github-actions[bot]" ]; then
+            skip="this run was triggered by github-actions[bot]"
+          fi
+        fi
+
+        if [ -n "$skip" ]; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          echo "Cluedoc skipped: ${skip}." >> "$GITHUB_STEP_SUMMARY"
+          echo "Cluedoc skipped: ${skip}."
+        else
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ------------------------------------------------------------------- scope
+    # The examples hand-wrote a different `git diff` into each workflow's prompt.
+    # Deriving it here is what lets a caller write no diff expression at all.
+    - id: scope
+      if: steps.preflight.outputs.skip != 'true'
+      shell: bash
+      env:
+        INPUT_SCOPE: ${{ inputs.scope }}
+        INPUT_PUSH: ${{ inputs.push }}
+        INPUT_COMMIT_MESSAGE: ${{ inputs.commit_message }}
+      run: |
+        set -euo pipefail
+        range=""
+
+        # What the agent is told to do with its result. Assembled here rather
+        # than as an expression in the prompt: a conditional that spans lines
+        # inside a block scalar is a runtime-only failure, and nothing below the
+        # runner would catch it.
+        if [ "$INPUT_PUSH" = "true" ]; then
+          echo "finish=If nothing needs changing, make no commit and stop. Otherwise commit only .cluedoc/** as \"${INPUT_COMMIT_MESSAGE}\" and push to the current branch." >> "$GITHUB_OUTPUT"
+        else
+          echo "finish=Leave every change in the working tree. Do not commit and do not push." >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ "$INPUT_SCOPE" = "all" ]; then
+          range=""
+        elif [ -n "$INPUT_SCOPE" ]; then
+          range="$INPUT_SCOPE"
+        else
+          case "$GITHUB_EVENT_NAME" in
+            pull_request|pull_request_target)
+              base="$GITHUB_BASE_REF"
+              git fetch --no-tags origin "+refs/heads/${base}:refs/remotes/origin/${base}"
+              # A shallow checkout has no merge base, and the git error for that
+              # names neither the cause nor the fix.
+              if ! git merge-base "origin/${base}" HEAD >/dev/null 2>&1; then
+                echo "::error::No merge base with origin/${base}. Check out with 'fetch-depth: 0' so Cluedoc can scope the diff to this pull request."
+                exit 1
+              fi
+              range="origin/${base}...HEAD"
+              ;;
+            push)
+              before=$(jq -r '.before // ""' "$GITHUB_EVENT_PATH")
+              # A new branch reports an all-zero `before`, and a force-push can
+              # report a commit that is no longer reachable. Both mean there is
+              # no range, not an empty one.
+              if [ -n "$before" ] && git cat-file -e "${before}^{commit}" 2>/dev/null; then
+                range="${before}..${GITHUB_SHA}"
+              fi
+              ;;
+          esac
+        fi
+
+        if [ -z "$range" ]; then
+          echo "range=" >> "$GITHUB_OUTPUT"
+          echo "scope=the whole repository" >> "$GITHUB_OUTPUT"
+          echo "empty=false" >> "$GITHUB_OUTPUT"
+          echo "Cluedoc scope: the whole repository."
+          exit 0
+        fi
+
+        # Caught rather than allowed to abort the step: an unresolvable range is
+        # almost always a mistyped `scope`, and git's own message for it names
+        # neither this input nor the workflow that set it.
+        if ! changed=$(git diff --name-only "$range" 2>/dev/null | wc -l | tr -d ' '); then
+          echo "::error::Cannot diff \`${range}\`. Check the 'scope' input, or that every ref it names exists in this checkout."
+          exit 1
+        fi
+
+        echo "range=${range}" >> "$GITHUB_OUTPUT"
+        echo "scope=\`git diff --name-only ${range}\`" >> "$GITHUB_OUTPUT"
+
+        # Nothing changed: stop before spending a single token. Common on merge
+        # commits and on pushes that only touch tags.
+        if [ "$changed" = "0" ]; then
+          echo "empty=true" >> "$GITHUB_OUTPUT"
+          echo "Cluedoc skipped: no files changed in ${range}." >> "$GITHUB_STEP_SUMMARY"
+          echo "Cluedoc skipped: no files changed in ${range}."
+        else
+          echo "empty=false" >> "$GITHUB_OUTPUT"
+          echo "Cluedoc scope: ${changed} changed file(s) in ${range}."
+        fi
+
+    # ------------------------------------------------------------------- skill
+    # From this checkout, never a fresh clone. `$GITHUB_ACTION_PATH` is this
+    # repository at the ref the caller pinned, so the skill and the prompt that
+    # drives it are the same version by construction.
+    - name: Install the Cluedoc skill
+      if: steps.preflight.outputs.skip != 'true' && steps.scope.outputs.empty != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        dest="${GITHUB_WORKSPACE}/.claude/skills/cluedoc"
+        mkdir -p "$dest"
+
+        # Copied by exclusion rather than by listing what the skill contains:
+        # an extra file in the skill directory is harmless, a missing bundled
+        # resource is a skill that silently misbehaves.
+        tar -C "$GITHUB_ACTION_PATH" \
+          --exclude=./.git --exclude=./.github --exclude=./docs --exclude=./examples \
+          --exclude=./action.yml --exclude=./README.md --exclude=./LICENSE \
+          -cf - . | tar -C "$dest" -xf -
+
+        # Local-only, so the agent's `git status` stays clean and the skill it
+        # is running cannot end up committed to the caller's repository.
+        if [ -d "${GITHUB_WORKSPACE}/.git" ]; then
+          echo "/.claude/skills/cluedoc/" >> "${GITHUB_WORKSPACE}/.git/info/exclude"
+        else
+          echo "::warning::No git checkout in the workspace. Add actions/checkout before this step."
+        fi
+
+    # --------------------------------------------------------------------- run
+    - name: Sync papers
+      if: steps.preflight.outputs.skip != 'true' && steps.scope.outputs.empty != 'true'
+      uses: anthropics/claude-code-action@v1
+      with:
+        anthropic_api_key: ${{ inputs.api_key }}
+        github_token: ${{ inputs.github_token }}
+        prompt: |
+          Use the cluedoc skill to sync .cluedoc/ with the code that changed.
+
+          Scope strictly to ${{ steps.scope.outputs.scope }}.
+          Follow Cluedoc's progressive rule — update only the papers those changes
+          affect, upward and downward. Do not re-document the repository.
+
+          ${{ steps.scope.outputs.finish }}
+        claude_args: |
+          --model ${{ inputs.model }}
+          --max-turns 25
+          --allowedTools Read,Write,Edit,Glob,Grep,Bash
+          ${{ inputs.claude_args }}

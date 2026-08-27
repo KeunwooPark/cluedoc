@@ -5,7 +5,7 @@
 # cannot run at PR time. This picks those merges up on the way in.
 #
 # Use it on its own if you would rather keep papers out of PR review entirely —
-# one clean docs commit per merge, no loop guard and no fork problem to think about.
+# one clean docs commit per merge, and no fork problem to think about.
 #
 # Copy to .github/workflows/cluedoc-main.yml and add an ANTHROPIC_API_KEY secret.
 
@@ -15,40 +15,8 @@ on:
   push:
     branches: [main]
 
-concurrency:
-  group: cluedoc-main
-  cancel-in-progress: false # let each merge's sync finish; they build on each other
-
 jobs:
-  sync:
-    if: github.event.head_commit.author.name != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install the Cluedoc skill
-        run: git clone --depth 1 https://github.com/KeunwooPark/cluedoc.git .claude/skills/cluedoc
-
-      - uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt: |
-            Use the cluedoc skill to sync .cluedoc/ with the code that just landed.
-
-            Scope strictly to `git diff --name-only ${{ github.event.before }}..${{ github.sha }}`.
-            Follow Cluedoc's progressive rule — update only the papers those changes
-            affect, upward and downward. Do not re-document the repository.
-
-            If nothing needs changing, make no commit and stop.
-            Otherwise commit only .cluedoc/** to main as
-            "docs(cluedoc): sync papers" and push.
-          claude_args: |
-            --model claude-sonnet-5
-            --max-turns 25
-            --allowedTools Read,Write,Edit,Glob,Grep,Bash
+  cluedoc:
+    uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
+    secrets:
+      api_key: ${{ secrets.ANTHROPIC_API_KEY }}

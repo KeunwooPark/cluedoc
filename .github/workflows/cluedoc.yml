@@ -1,0 +1,80 @@
+# Cluedoc as a reusable workflow.
+#
+# An action is a step: it cannot bring its own checkout, concurrency or
+# permissions, and those are the parts most easily copied wrong. This wraps all
+# of them, so a caller writes a trigger and a secret and nothing else.
+#
+#   jobs:
+#     cluedoc:
+#       uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
+#       secrets:
+#         api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+#
+# The caller still writes `on:` — a reusable workflow cannot declare its own
+# trigger. See examples/ for the two shapes worth copying.
+
+name: Cluedoc
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        type: string
+        required: false
+        default: claude-sonnet-5
+      scope:
+        description: Explicit diff range; inferred from the event when empty.
+        type: string
+        required: false
+        default: ""
+      commit_message:
+        type: string
+        required: false
+        default: "docs(cluedoc): sync papers"
+      claude_args:
+        type: string
+        required: false
+        default: ""
+    secrets:
+      api_key:
+        required: true
+
+# One run per pull request; a new push cancels the run still working on the old
+# commit. Merges to the default branch are not cancelled — each one's sync
+# builds on the last.
+concurrency:
+  group: cluedoc-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sync:
+    # Forks and drafts are refused here rather than inside the action, because
+    # checkout runs first and a fork's head branch does not exist in this
+    # repository. The action guards them again for anyone composing it directly.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+
+    # A called workflow's permissions are intersected with the caller's, so a
+    # repository whose default GITHUB_TOKEN is read-only must also grant
+    # `contents: write` on the calling job.
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
+          fetch-depth: 0 # the action needs base..head to scope the diff
+
+      - uses: KeunwooPark/cluedoc@v1
+        with:
+          api_key: ${{ secrets.api_key }}
+          model: ${{ inputs.model }}
+          scope: ${{ inputs.scope }}
+          commit_message: ${{ inputs.commit_message }}
+          claude_args: ${{ inputs.claude_args }}
