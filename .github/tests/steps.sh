@@ -79,7 +79,7 @@ export GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main
 GITHUB_EVENT_PATH=$(ev '{}') run scope >/dev/null
 check "PR range" range "origin/main...HEAD"
 check "PR not empty" empty false
-checkgrep "PR scope is a diff command" out 'scope=`git diff --name-only origin/main...HEAD`'
+checkgrep "PR scope is logged with its range" stdout "in origin/main...HEAD"
 
 export GITHUB_EVENT_NAME=push GITHUB_SHA="$HEAD_SHA"
 GITHUB_EVENT_PATH=$(ev "{\"before\":\"$BASE_SHA\"}") run scope >/dev/null
@@ -88,7 +88,7 @@ check "push range" range "$BASE_SHA..$HEAD_SHA"
 GITHUB_EVENT_PATH=$(ev '{"before":"0000000000000000000000000000000000000000"}') run scope >/dev/null
 check "new branch falls back to full tree" range ""
 check "full tree is not 'empty'" empty false
-checkgrep "full tree says so" out "scope=the whole repository"
+checkgrep "full tree says so" stdout "Cluedoc scope: the whole repository"
 
 INPUT_SCOPE=all GITHUB_EVENT_PATH=$(ev '{}') run scope >/dev/null
 check "scope: all -> full tree" range ""

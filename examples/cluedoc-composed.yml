@@ -26,7 +26,7 @@ jobs:
       - uses: KeunwooPark/cluedoc@v1
         id: cluedoc
         with:
-          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          api_key: ${{ secrets.OPENAI_API_KEY }}
           push: false
           scope: all # workflow_dispatch has no diff to infer; document everything
 

@@ -7,7 +7,7 @@
 # Use it on its own if you would rather keep papers out of PR review entirely —
 # one clean docs commit per merge, and no fork problem to think about.
 #
-# Copy to .github/workflows/cluedoc-main.yml and add an ANTHROPIC_API_KEY secret.
+# Copy to .github/workflows/cluedoc-main.yml and add an OPENAI_API_KEY secret.
 
 name: Cluedoc (main)
 
@@ -19,4 +19,4 @@ jobs:
   cluedoc:
     uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
     secrets:
-      api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      api_key: ${{ secrets.OPENAI_API_KEY }}

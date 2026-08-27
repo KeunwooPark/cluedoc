@@ -5,7 +5,7 @@
 # into the PR branch, so the docs are reviewed and merged atomically with the
 # change that caused them.
 #
-# Copy to .github/workflows/cluedoc.yml and add an ANTHROPIC_API_KEY secret.
+# Copy to .github/workflows/cluedoc.yml and add an OPENAI_API_KEY secret.
 
 name: Cluedoc
 
@@ -17,7 +17,11 @@ jobs:
   cluedoc:
     uses: KeunwooPark/cluedoc/.github/workflows/cluedoc.yml@v1
     secrets:
-      api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      api_key: ${{ secrets.OPENAI_API_KEY }}
+    # Any endpoint that speaks OpenAI chat completions will do. See
+    # cluedoc-gateway.yml for pointing this at a gateway of your own.
+    # with:
+    #   model: gpt-5
     # Only needed if this repository's default GITHUB_TOKEN is read-only:
     # a called workflow cannot be granted more than its caller holds.
     # permissions:
