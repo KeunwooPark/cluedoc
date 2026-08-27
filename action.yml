@@ -1,5 +1,5 @@
 name: Cluedoc
-description: Keep .cluedoc/ papers in sync with the code that changed, on every pull request.
+description: Documentation that keeps up with coding agents — one visual paper per feature, synced into every pull request.
 author: keunwoo
 
 branding:
