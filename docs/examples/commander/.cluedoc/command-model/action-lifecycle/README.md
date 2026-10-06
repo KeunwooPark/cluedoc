@@ -8,61 +8,85 @@ sources:
 ```mermaid
 sequenceDiagram
     participant P as parent command
-    participant C as chosen command
+    participant C as selected command
     participant A as action handler
     P->>C: pre-subcommand hook
-    C->>C: pre-action hook
-    C->>A: run action with args, options, command
+    C->>C: pre-action hooks
+    C->>A: run with arguments, option values, command
     A-->>C: value or promise
-    C->>C: post-action hook
-    C-->>P: chain settles
+    C->>C: post-action hooks
+    C-->>P: the promise chain ends
 ```
 
 ## Abstract
 
-Once the tree has chosen a single command to run, the action lifecycle governs what happens next: the ordered sequence of hooks that fire around the command's own behaviour, the handler that receives the resolved arguments and options, and the machinery that lets any step be asynchronous without changing the ordering. This is where declaration turns into execution.
+The action lifecycle starts after Commander selects the command that runs. It is a fixed sequence of hooks around the action handler of that command. The action handler gets the final arguments and option values. Any step in the sequence can be asynchronous, but the order of the steps does not change. In this part of the framework, the declarations become a real run.
 
 ## Introduction
 
-Choosing the right command is only half the job; the command still has to *do* something, and real programs need to wrap that doing with cross-cutting concerns — open a connection before the action, tear it down after, log around a whole subtree. If every command had to implement those concerns inline, they would be duplicated and fragile.
+The selection of a command is only half of the work, because the command must then do its task. Real programs must also do other tasks around the main task. For example, a program can open a connection before the action and close it after the action. If each command does these tasks itself, the code repeats and becomes difficult to maintain.
 
-The lifecycle solves this by defining fixed moments around a command's run and letting authors attach behaviour to those moments. A reader needs two ideas. First, there are named moments — before a subcommand, before the action, after the action — and hooks registered at any command in the ancestry can observe them. Second, the whole chain is *order-preserving even when asynchronous*: the framework runs steps synchronously until something returns a promise, then chains the rest, so a mix of sync and async steps still executes in the declared order.
+The lifecycle solves this problem with fixed points around the run of a command. Authors attach hooks to these points. The reader must know two ideas:
+
+- There are three named points: before a subcommand, before the action, and after the action.
+- The sequence keeps its order when steps are asynchronous. Commander runs the steps one after the other until a step returns a promise. Then it attaches all other steps to the promise chain.
 
 ## Related Work
 
-- Parent: [Command Model](../README.md) — how the command that runs was chosen.
-- The resolved values a handler receives come from [Value Sources](../../option-parsing/value-resolution/README.md) and [Positional Arguments](../../positional-arguments/README.md).
-- The whole system: [Commander.js](../../README.md).
+- Parent: [Command Model](../README.md) — how Commander selects the command that runs.
+- The option values that the action handler gets: [Value Sources](../../option-parsing/value-resolution/README.md).
+- The arguments that the action handler gets: [Positional Arguments](../../positional-arguments/README.md).
+- The full system: [Commander.js](../../README.md).
 
 ## Description
 
-**The action handler is the destination.** A command may carry one action: the piece of code the author actually wants to run. When invoked it receives the command's processed positional arguments spread out in order, then an object of resolved option values, and finally the command itself — so a handler can reach for whatever level of detail it needs.
+**The action handler is the end point.** A command can have one action handler. This handler is the code that the author wants to run. The handler gets three groups of values, in this order:
 
-**Hooks bracket the run.** Three named moments can carry listeners:
+1. One value for each declared argument, after the custom parsers and the variadic collection.
+2. One object that holds the option values of the command.
+3. The command itself.
+
+Thus, a handler can get the level of detail that it needs. In an older mode, the command keeps its option values as its own properties. In this mode, the handler gets the command in the place of the option object.
+
+**Hooks are around the run.** The table shows the three hook points.
+
+| Hook point | When it runs | Where Commander finds the hooks |
+|---|---|---|
+| Pre-subcommand | When a parent dispatches to a child | Only on the parent that dispatches |
+| Pre-action | Immediately before the action handler | On the command and on all its ancestors |
+| Post-action | After the action handler ends | On the command and on all its ancestors |
+
+Each hook gets two commands: the command that has the hook and the command that runs. Thus, a hook near the root can see which subcommand runs.
 
 ```mermaid
 flowchart TD
-    PRE_SUB["pre-subcommand<br/>fires as a parent hands to a child"] --> PRE_ACT["pre-action<br/>fires just before the action"]
-    PRE_ACT --> ACT["the action itself"]
-    ACT --> POST["post-action<br/>fires after the action settles"]
+    PRE_SUB["pre-subcommand hook<br/>on the parent"] --> PRE_ACT["pre-action hooks<br/>root first"]
+    PRE_ACT --> ACT["action handler"]
+    ACT --> LEG["legacy event to the parent"]
+    LEG --> POST["post-action hooks<br/>root last"]
 ```
 
-The pre-action and post-action moments gather hooks from the entire chain of the command and its ancestors, so a hook set near the root wraps every descendant's action. The ordering is deliberate: entering hooks run outermost-first on the way in, and the after moment runs in reverse, so setup and teardown nest cleanly like matching brackets.
+**The order of the hooks is like a set of brackets.** Commander collects the pre-action hooks from the root down to the command. Thus, a hook on the root runs first. For the post-action hooks, Commander uses the opposite order. Thus, a hook on the root runs last. Because of this order, the setup and the cleanup steps nest correctly.
 
-**Asynchrony is threaded, not forked.** Each step — a hook, the action, a legacy event — is run through a small chaining rule: if nothing so far has produced a promise, the next step runs immediately; the instant a step returns a promise, every remaining step is chained onto it. The consequence is that a program built entirely from synchronous steps completes synchronously, while one that awaits anywhere becomes a single ordered promise the caller can await. The declared order never changes; only the timing does.
+**Asynchronous steps keep the order.** Commander uses one rule for each step: a hook, the action handler, or the legacy event. The rule is as follows:
+
+- If no step has returned a promise, the next step runs immediately.
+- If a step returns a promise, Commander attaches each subsequent step to that promise.
 
 ```mermaid
 flowchart LR
-    S1["step"] --> Q{"do we already<br/>hold a promise?"}
-    Q -- no --> RUN["run step now"]
-    Q -- yes --> CHAIN["chain step after promise"]
-    RUN --> R2["result may itself<br/>be a promise"]
+    S1["step"] --> Q{"a promise<br/>exists?"}
+    Q -- no --> RUN["run the step now"]
+    Q -- yes --> CHAIN["attach the step to the promise"]
+    RUN --> R2["the result can be<br/>a new promise"]
     R2 --> NEXT["next step"]
     CHAIN --> NEXT
 ```
 
-**Legacy events coexist.** Alongside modern hooks, a command still emits an event to its parent when it runs, preserving an older listener-based style. New code leans on hooks and the action handler; the events remain so existing programs keep working.
+If all steps are synchronous, the full run is synchronous. If one step is asynchronous, the run becomes one promise chain with the correct order. The order of the steps stays the same, and only the time changes. If an action handler is asynchronous, the program must use the asynchronous parse. The synchronous parse does not wait for the promise.
+
+**Legacy events stay available.** After the action handler, a command also sends an event to its parent. This event keeps an older style of listener available. New code uses hooks and action handlers. The event stays so that old programs continue to operate.
 
 ## Conclusion
 
-The action lifecycle is a fixed, order-preserving choreography: pre-subcommand as control descends, then pre-action, the action, and post-action, with hooks from the whole ancestry nesting around the run and asynchrony threaded through without disturbing order. To revisit how the running command was selected, return to the [Command Model](../README.md); to see where the handler's argument and option values come from, read [Value Sources](../../option-parsing/value-resolution/README.md).
+The action lifecycle is a fixed sequence of steps with a constant order. The sequence is the pre-subcommand hook, the pre-action hooks, the action handler, and the post-action hooks. Hooks from all ancestors nest around the run, and asynchronous steps do not change the order. To learn how Commander selects the command that runs, go back to the [Command Model](../README.md). To learn where the option values come from, read [Value Sources](../../option-parsing/value-resolution/README.md).

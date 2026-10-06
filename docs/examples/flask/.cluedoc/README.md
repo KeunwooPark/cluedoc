@@ -6,92 +6,106 @@ sources:
   - src/flask/app.py
   - src/flask/sansio/app.py
   - src/flask/sansio/scaffold.py
+  - src/flask/templating.py
+  - src/flask/cli.py
 ---
 
 ```mermaid
 flowchart TD
-    W[Incoming web request] --> APP[The Application object]
-    APP --> LC[Application and Request Lifecycle]
-    LC --> RT[Routing and URL Building]
-    RT --> CTX[The Context System]
-    CTX --> VIEW[Your view returns a value]
-    VIEW --> RESP[A finished response]
+    W["Web request"] --> APP["Application object"]
+    APP --> PUSH["Push the context"]
+    PUSH --> MATCH["Match the route"]
+    MATCH --> VIEW["Run the view function"]
+    VIEW --> RESP["Make the response"]
 
-    BP[Blueprints] -.compose routes into.-> APP
-    CFG[Configuration] -.tunes.-> APP
-    SESS[Sessions and Secure Cookies] -.ride along with.-> RESP
+    BP["Blueprints"] -. "add routes to" .-> APP
+    CFG["Configuration"] -. "controls" .-> APP
+    SESS["Session"] -. "goes out with" .-> RESP
 ```
 
 ## Abstract
 
-Flask is a small, unopinionated toolkit for building web applications and APIs in Python. It gives you one central *application object* that receives web requests, decides which piece of your code should answer each one, hands that code a convenient view of the incoming request, and turns whatever your code returns into a proper response. Everything else — how requests are matched to code, how shared data is made available, how apps are split into modules, how sessions and settings work — is layered around that core loop. Flask deliberately stays "micro": it ships the essentials and lets you add the rest.
+Flask is a small framework for web applications and web APIs in Python. Its center is one application object. The application object receives each web request and finds the view function for it. Then it runs the view function and changes the return value into a response. The other features of Flask attach to this request pipeline. Flask gives only the necessary parts, and the application author adds the other parts.
 
 ## Introduction
 
-Web servers speak a raw, low-level dialect: a request arrives as a bag of environment values, and a response must be produced as status, headers, and a stream of bytes. Writing every application directly against that dialect is tedious and error-prone. Flask sits in the middle. It presents a friendly surface to the application author — decorate a function, return a string or some data — while handling the unglamorous mechanics of matching, dispatch, error handling, and cleanup underneath.
+A web server gives each request to the application in a low-level form. The request is a set of environment values. The application must send back a status, headers, and a body of bytes. Flask changes this low-level form into a simple form for the application author. The author writes a function and returns a string or some data. Flask does the route lookup, the dispatch, the error handling, and the cleanup.
 
-The framework's defining idea is *ergonomics through context*. While a request is being handled, Flask makes the current application, the current request, a session, and a scratchpad for shared data available as ambient globals, so your code can reach for them without threading them through every function call. This convenience is carefully engineered to stay correct even when many requests are handled at once. Understanding Flask means understanding that central request loop and the handful of systems that orbit it.
+The main design idea of Flask is the context. While Flask handles a request, it makes some objects available through context proxies. These objects are the current application, the current request, the session, and a shared namespace. Your code can use these objects without a parameter in each function call. Each request has its own context, thus the context proxies stay correct when many requests run at the same time.
 
 ## Related Work
 
-This is the root paper. The major capabilities of Flask are documented as child papers:
+This is the root paper. The child papers describe the main features of Flask:
 
-- [Application and Request Lifecycle](./application-and-request-lifecycle/README.md) — the central object and the pipeline a request travels through.
-- [Routing and URL Building](./routing-and-url-building/README.md) — matching an address to your code, and generating addresses back.
-- [The Context System](./the-context-system/README.md) — the ambient globals that make application authoring convenient and safe.
-- [Blueprints](./blueprints/README.md) — composing a large application from reusable modules.
-- [Sessions and Secure Cookies](./sessions-and-secure-cookies/README.md) — remembering data about a visitor between requests.
-- [Configuration](./configuration/README.md) — loading and organizing an application's settings.
+- [Application and Request Lifecycle](./application-and-request-lifecycle/README.md) — This paper describes the application object and the request pipeline.
+- [Routing and URL Building](./routing-and-url-building/README.md) — This paper describes how Flask matches a URL to a view function and builds URLs.
+- [The Context System](./the-context-system/README.md) — This paper describes the context and the context proxies.
+- [Blueprints](./blueprints/README.md) — This paper describes how you make a large application from modules.
+- [Sessions and Secure Cookies](./sessions-and-secure-cookies/README.md) — This paper describes how Flask keeps visitor data between requests.
+- [Configuration](./configuration/README.md) — This paper describes how Flask loads and keeps the settings of an application.
 
 ## Description
 
-At the heart of Flask is a single object that represents your whole application. You create it once, register your pages and behaviors on it during setup, and then hand it to a web server. From that point on, every request the server receives is passed to this object, which runs it through a well-defined pipeline and returns a response.
+Flask has two phases: the setup phase and the serving phase. In the setup phase, you create the application object one time. Then you register routes, hooks, error handlers, settings, and blueprints on it. In the serving phase, a web server gives each request to the application object. The application object sends the request through the request pipeline and returns a response.
 
 ```mermaid
 flowchart LR
-    subgraph Setup [Setup time]
-        R1[Register routes]
-        R2[Register settings]
-        R3[Register modules]
+    subgraph Setup ["Setup phase (one time)"]
+        R1["Register routes"]
+        R2["Load settings"]
+        R3["Register blueprints"]
     end
-    subgraph Serving [Serving time]
-        D[Receive request]
-        M[Match to a handler]
-        H[Run your handler]
-        F[Finish response]
+    subgraph Serving ["Serving phase (each request)"]
+        D["Receive the request"]
+        M["Match the route"]
+        H["Run the view function"]
+        F["Make the response"]
     end
     Setup --> Serving
     D --> M --> H --> F
 ```
 
-The systems in this documentation set divide cleanly into two phases. **Setup** happens once, before any traffic: you attach routes, load settings, and register modules. **Serving** happens per request: the application matches the request to a handler, establishes the ambient context, runs your code, and finalizes the response.
+The setup phase closes after the first request. If code tries to register a new route or hook after that time, Flask stops it with an error. This rule keeps the shape of the application stable in the serving phase. Thus the request pipeline always sees the same routes and hooks.
 
-Two long-standing hallmarks round out the picture but are lighter integrations rather than large subsystems. Flask embeds a mature templating engine so that handlers can render HTML pages from reusable templates, and it ships a command-line tool for running and inspecting an application during development. Both lean on the same central object and context system described in the child papers.
+The table shows the phase in which each main feature does its work.
+
+| Feature | Setup phase | Serving phase |
+|---|---|---|
+| Application and Request Lifecycle | Collects hooks and error handlers | Runs the request pipeline |
+| Routing and URL Building | Adds URL rules to the route table | Matches each request and builds URLs |
+| The Context System | Gives an application context to setup code, if necessary | Pushes and pops one context for each request |
+| Blueprints | Adds module setup to the application | Scopes hooks and error handlers to a module |
+| Sessions and Secure Cookies | Not used | Opens and saves the session |
+| Configuration | Loads the settings | Gives settings to all features |
+
+Flask also includes two smaller integrations. The first integration is a template engine. View functions use it to make HTML pages from templates. The second integration is a command-line tool. Developers use it to run the application and to do maintenance tasks. Both integrations use the same application object and the same context.
 
 ```mermaid
 mindmap
   root((Flask))
     Lifecycle
-      request pipeline
-      response finalizing
-      error handling
+      Request pipeline
+      Response normalization
+      Error handlers
     Routing
-      the route table
-      address building
+      Route table
+      URL building
     Context
-      ambient globals
-      shared scratchpad
+      Context proxies
+      Shared namespace
     Blueprints
-      modular routes
-      nesting
+      Deferred steps
+      Nested blueprints
     Sessions
-      signed cookies
+      Signed cookie
+      Session interface
     Configuration
-      layered settings
+      Configuration store
+      Load sources
 ```
 
-Flask's design philosophy is visible throughout: provide sensible defaults, keep the surface small, and make almost every decision overridable. The framework favors explicit registration during setup and predictable behavior during serving, which is what makes both small scripts and large applications comfortable to write on the same foundation.
+Flask has a default for most behavior, and you can replace most parts. For example, you can replace the session interface, the request class, and the response class. Flask uses explicit registration in the setup phase. It uses a predictable order in the serving phase. Thus a small script and a large application use the same base.
 
 ## Conclusion
 
-Flask is best understood as one request loop surrounded by a few well-chosen conveniences. If you are new to the framework, begin with the [Application and Request Lifecycle](./application-and-request-lifecycle/README.md) to see the whole pipeline end to end, then read [Routing and URL Building](./routing-and-url-building/README.md) and [The Context System](./the-context-system/README.md) to understand how requests reach your code and how your code reaches shared state. From there, [Blueprints](./blueprints/README.md), [Sessions and Secure Cookies](./sessions-and-secure-cookies/README.md), and [Configuration](./configuration/README.md) cover how real applications grow, remember, and are tuned.
+Flask is one request pipeline with a small set of features around it. If you are new to Flask, start with [Application and Request Lifecycle](./application-and-request-lifecycle/README.md) to see the full pipeline. Then read [Routing and URL Building](./routing-and-url-building/README.md) and [The Context System](./the-context-system/README.md). These papers show how a request gets to your code and how your code gets the current objects. After that, read [Blueprints](./blueprints/README.md), [Sessions and Secure Cookies](./sessions-and-secure-cookies/README.md), and [Configuration](./configuration/README.md).
