@@ -136,6 +136,8 @@ On a self-hosted runner, one more: the engine is a dependency-free Node program,
 
 **Abstract prose, anchored to code.** Papers are about the code but never contain it. The prose stays abstract and human, with no snippets, symbols, or file paths. The link to the implementation lives in a `sources` list in the frontmatter, kept at the granularity of files so it survives ordinary refactors.
 
+**Written in Simplified Technical English.** All paper prose follows [ASD-STE100](https://www.asd-ste100.org/): simple approved words with one meaning each, the active voice, simple tenses, short sentences (25 words maximum for description, 20 for instructions), and short single-topic paragraphs. The result is easy to read for non-native speakers and easy to translate.
+
 **Every paper has the same shape.** Each paper is YAML frontmatter followed by six sections, always in order: a hero visual, abstract, introduction, related work, description, and conclusion. Related Work is the connective tissue: every cross-paper link lives there, turning the docs into a citation graph you can traverse.
 
 **It also guides your reading.** When you ask how the system works (a feature, a flow, "where does X happen"), Cluedoc answers, then appends a short **Reading Guide**: the two-to-five papers most worth reading, in a suggested order. This only kicks in once a `.cluedoc/` folder exists.

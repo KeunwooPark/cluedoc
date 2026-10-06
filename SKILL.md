@@ -5,7 +5,7 @@ description: >-
 license: MIT
 metadata:
   author: keunwoo
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Cluedoc
@@ -148,6 +148,44 @@ sources:
 Keep `sources` at the granularity of files or directories (not symbols or line numbers) so it survives ordinary refactors. When code moves, update `sources`; the prose usually needn't change at all — which is exactly the point of keeping them separate.
 
 **`sources` may overlap across papers.** One file often contributes to several features (an entry point that implements part of many capabilities; a shared module that a "hub" feature and its consumers both draw on). Listing the same file under multiple papers is expected and correct — `sources` maps *feature → the code that realizes it*, not code → one owner. Do not force a file to belong to exactly one paper.
+
+## Write in Simplified Technical English (ASD-STE100)
+
+Write all paper prose in **ASD-STE100 Simplified Technical English** (STE). STE is a controlled language for technical documentation. It removes ambiguity and makes text easy to read for every reader, including non-native English speakers and translation tools. Papers are mostly *descriptive* writing, so the descriptive rules apply to most text; the procedural rules apply when a paper tells the reader to do something.
+
+**Words.**
+- Use simple, common words. Prefer the STE approved word where one exists: "start", not "commence" or "initiate"; "use", not "utilize" or "leverage"; "help", not "facilitate"; "show", not "illustrate".
+- **One word, one meaning.** Use a word only in one meaning, and always use the same word for the same thing. When you name a concept (for example, "the *parse loop*"), use exactly that name everywhere in the paper and in related papers. Do not use synonyms for variety.
+- You can use **technical names** (names of features, components, and domain concepts, such as "session token" or "middleware") and **technical verbs** of the domain (such as "parse", "serialize", "cache"). Use them only with their technical meaning.
+- Do not use slang, idioms, metaphors, or marketing words ("seamless", "powerful", "under the hood", "magic").
+- Use a verb to show an action. Do not change verbs into nouns: "the router *validates* the request", not "the router *performs validation of* the request".
+
+**Noun clusters.** Do not use more than **three** nouns in a row. Break a longer cluster with a preposition: "the expiry time of the refresh token", not "the refresh token expiry time value".
+
+**Verbs and voice.**
+- Use only simple tenses: the **simple present** (the default in papers), the simple past, and the simple future.
+- Use the **active voice**. Show who or what does the action: "the scheduler sends the job to a worker", not "the job is sent to a worker". Use the passive voice only when the actor is unknown or not important, and only in descriptive text.
+- Do not use the "-ing" form of a verb as a verb or in a participle phrase: "when the server receives a request, it ...", not "upon receiving a request, the server ...". "-ing" words are permitted in technical names (for example, "token refresh", "load balancing").
+
+**Sentences.**
+- Descriptive sentences: **25 words maximum**. Procedural sentences: **20 words maximum**.
+- Write **one topic per sentence**. If a sentence has two ideas, make two sentences.
+- Do not remove articles ("the", "a", "an") or other words to make sentences shorter.
+- Use connecting words ("then", "but", "because", "thus", "if") to show how sentences are related.
+- Put a condition **before** the result: "If the token is expired, the server rejects the request."
+
+**Paragraphs.**
+- Write **one topic per paragraph**. A paragraph has **six sentences maximum**.
+- Start each paragraph with a topic sentence that tells the reader what the paragraph is about.
+- Use a vertical list when you describe more than two items, steps, or conditions.
+
+**Instructions (procedural text).** When a paper tells the reader what to do (for example, how to extend a feature):
+- Write the instruction as a command (imperative): "Add the new handler to the registry."
+- Write one instruction per sentence. Combine two actions only when the reader does them at the same time.
+- Put each step in a numbered list, in the order the reader does them.
+- Start a warning or caution with a simple, clear command, then give the reason: "Do not change the key format. Existing sessions become invalid."
+
+**Scope.** STE applies to every sentence a reader reads in a paper: the six sections, list items, table cells, and the labels in visuals (keep diagram labels short and use the same names as the prose). It does not apply to the frontmatter, to paper titles that are established names, or to quoted proper names.
 
 ## The Paper Structure
 
