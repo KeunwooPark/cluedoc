@@ -7,67 +7,93 @@ sources:
 
 ```mermaid
 flowchart TD
-    ROOT["program - the root command"]
+    ROOT["program: the root command"]
     ROOT --> C1["subcommand"]
     ROOT --> C2["subcommand"]
-    C2 --> G1["grandchild"]
-    C1 -. inherits settings .-> ROOT
-    C2 -. inherits settings .-> ROOT
+    C2 --> G1["child of a subcommand"]
+    ROOT -. "copies settings to" .-> C1
+    ROOT -. "copies settings to" .-> C2
     ROOT --> DEF{{"default command"}}
-    C1 --> KIND{"handled in-process<br/>or external executable?"}
+    C1 --> KIND{"in-process or<br/>external subcommand?"}
 ```
 
 ## Abstract
 
-The command model is the framework's backbone: the idea that a program is a tree of named commands, each of which may own subcommands, arguments, options, and behaviour. This paper covers how commands are declared and nested, how one command hands control to a child, how aliases and a default command loosen the matching, and how a subcommand may live in-process or as a separate executable on disk. It is the structure every other capability walks over.
+The command model is the base of the framework. In this model, a program is a tree of named commands. Each command can have subcommands, arguments, options, and an action. This paper tells how an author declares and nests commands. It also tells how a command dispatches control to a child, and how aliases and a default command change the match. Finally, it tells how a subcommand can run in-process or as an external program.
 
 ## Introduction
 
-A trivial tool does one thing, so its command line is just options and operands. Real tools grow verbs — one to build, one to serve, one to deploy — and those verbs often grow their own verbs. Without structure this becomes a tangle of conditionals. The command model gives the tangle a shape: a tree, rooted at the program itself, where every node is a fully-fledged command with its own vocabulary.
+A simple tool does only one thing, thus its command line has only options and operands. Larger tools have verbs, for example "build", "serve", and "deploy". These verbs often have their own verbs. Without a structure, the code for these verbs becomes a large set of conditions. The command model gives them a structure: a tree with the program at the root.
 
-The reader needs three notions. First, the root program *is* a command, not a special case. Second, nesting is uniform: a child command is built the same way as its parent and can nest again without limit. Third, children inherit certain settings from their parent when attached, so a policy set once near the root applies to the whole subtree unless a child overrides it.
+The reader must know three ideas:
+
+- The program is a command. It is not a special case.
+- All commands use the same structure. A child command is made in the same way as its parent, and it can have its own children.
+- A child that its parent makes gets a copy of some settings from the parent. Thus, a setting near the root applies to the full subtree.
 
 ## Related Work
 
-- Parent: [Commander.js](../README.md) — the whole system and how the tree anchors it.
-- Child: [Action Lifecycle](./action-lifecycle/README.md) — what happens once a command is chosen to run.
-- The parse loop that decides *which* child a word names: [Option Parsing](../option-parsing/README.md).
-- What a chosen command consumes as ordered operands: [Positional Arguments](../positional-arguments/README.md).
-- How an unrecognised command name becomes a suggestion: [Error Handling](../error-handling/README.md).
+- Parent: [Commander.js](../README.md) — the full system and the place of the command tree in it.
+- Child: [Action Lifecycle](./action-lifecycle/README.md) — what occurs after Commander selects the command that runs.
+- The parse loop, which finds the operand that names a child: [Option Parsing](../option-parsing/README.md).
+- The operands that the selected command uses: [Positional Arguments](../positional-arguments/README.md).
+- The message for an unknown command name: [Error Handling](../error-handling/README.md).
 
 ## Description
 
-**Declaring a command.** A command is created with a name and an optional signature describing its arguments. Attaching it to a parent registers it as a child, wires the parent link, and copies the inheritable settings downward. From that moment the child is addressable by name anywhere the parent is in control.
+**Declaration of a command.** An author gives a new command a name and, as an option, an argument signature. A command can join a parent in two ways:
 
-**Aliases and defaults loosen matching.** A command may answer to one or more aliases in addition to its name, so a long verb can have a terse synonym. One child may be marked the *default*: if the parent is invoked with operands but no recognised child name, the default command takes over. These two mechanisms make the tree forgiving without making it ambiguous.
+1. The parent makes the child and attaches it. In this case, the child gets a copy of the settings of the parent.
+2. The author makes the command alone and then attaches it to the parent. In this case, Commander does not copy the settings.
+
+After the attach, the parent knows the child by its name. Commander does not let two children of one parent use the same name or alias.
+
+**Aliases and a default command change the match.** A command can have one or more aliases in addition to its name. Thus, a long verb can have a short name. One child can be the *default command*. If no operand names a child, the parent sends control to the default command. The diagram shows the order of these checks after the parent parses its own options.
 
 ```mermaid
 flowchart TD
-    IN["a word arrives at a command"] --> Q1{"names a child<br/>by name or alias?"}
+    IN["the parent parses its options"] --> Q1{"first operand names a child<br/>by name or alias?"}
     Q1 -- yes --> DISP["dispatch to that child"]
-    Q1 -- no --> Q2{"is it the help command?"}
-    Q2 -- yes --> HELP["show help for target"]
-    Q2 -- no --> Q3{"a default command<br/>is defined?"}
-    Q3 -- yes --> DEFC["dispatch to default child"]
-    Q3 -- no --> SELF["this command handles it"]
+    Q1 -- no --> Q2{"first operand is<br/>the help command?"}
+    Q2 -- yes --> HELP["show help for the target"]
+    Q2 -- no --> Q3{"a default command<br/>is set?"}
+    Q3 -- yes --> DEFC["dispatch to the default command"]
+    Q3 -- no --> Q4{"the command has an action handler?"}
+    Q4 -- yes --> SELF["this command runs"]
+    Q4 -- no --> Q5{"the command has subcommands?"}
+    Q5 -- yes --> ERR["help or an unknown command error"]
+    Q5 -- no --> END["the parse ends and the program reads the values"]
 ```
 
-**Dispatch is a handoff.** When a command recognises that the next word names a child, it does not process that word itself. It slices the word off, prepares the child for its own parse, runs any pre-subcommand hook, and lets the child resume parsing the remaining input from scratch in its own context. Control has moved one level down the tree, and the same logic repeats there. This recursion is what makes arbitrarily deep command hierarchies work with one uniform rule.
+**Dispatch sends control down one level.** When the first operand names a child, the parent does not use that operand. It removes the operand and prepares the child for a new parse. Then it runs its pre-subcommand hooks. The child parses the other words again, in its own context. The same rules then apply at the lower level. Because of this recursion, one rule gives a command tree of any depth.
 
-**In-process versus external commands.** A subcommand comes in two flavours. Most are *handled in-process*: they carry an action to run inside the same program. But a subcommand can instead be declared as a standalone executable, in which case dispatching it means locating a sibling program on disk — by convention named after the parent and the subcommand — and spawning it as a child process with the remaining arguments passed through. Input and output are inherited, termination signals are forwarded, and the parent's exit tracks the child's.
+**In-process and external subcommands.** There are two types of subcommand:
+
+- An *in-process subcommand* has an action handler that runs in the same program.
+- An *external subcommand* is a separate program on disk. The author declares it with a description but without an action handler.
+
+For an external subcommand, Commander first checks mandatory options and conflict rules. Then it finds the program file and starts it as a child process. The name of the file is the name of the parent, a hyphen, and the name of the subcommand. The author can also give a different file name.
 
 ```mermaid
 flowchart LR
-    D["dispatch subcommand"] --> Q{"in-process<br/>or executable?"}
-    Q -- in-process --> A["run its action here"]
-    Q -- executable --> B["find sibling program on disk"]
-    B --> C["spawn as child process"]
-    C --> E["forward signals, inherit io"]
-    E --> F["parent exit follows child"]
+    D["dispatch subcommand"] --> Q{"in-process or<br/>external?"}
+    Q -- in-process --> A["parse and run its action here"]
+    Q -- external --> B["find the program file"]
+    B --> C["start a child process"]
+    C --> E["send signals, share input and output"]
+    E --> F["exit with the code of the child"]
 ```
 
-**Inheritance and state.** Attaching a child copies settings such as parsing policies and output configuration from the parent, so cross-cutting choices propagate. Separately, before the first parse a command snapshots its own initial state; a subsequent parse of the same program restores that snapshot first, so parsing is repeatable rather than accumulating leftovers from a previous run.
+The search for the file uses the steps that follow:
+
+1. Commander looks in the folder of the main script. It follows symbolic links to find the real folder. The author can also set a different folder.
+2. If the file name has no extension, Commander also tries the usual script extensions for JavaScript and TypeScript.
+3. If no local file exists, Commander uses the name as a command on the system path.
+
+If the file is a script, Commander starts it with the same Node.js runtime. The child process uses the same input and output streams as the parent. Commander sends the usual stop and user signals to the child. When the child stops, the parent exits with the same exit code. If a signal stopped the child, the exit code is 1.
+
+**Saved state makes the parse repeatable.** Before the first parse, a command saves its option values and their value sources. Before each subsequent parse of the same program, the command restores this saved state. Thus, the result of one parse does not change the next parse.
 
 ## Conclusion
 
-The command model is a uniform, recursive tree: the program is the root, every node is a real command, and dispatch is a disciplined handoff from parent to child. Aliases and a default command keep matching flexible; the in-process-versus-executable split lets a program be a monolith or a family of binaries. With the tree in place, read [Action Lifecycle](./action-lifecycle/README.md) to see what a chosen command actually does, or [Option Parsing](../option-parsing/README.md) to see how the framework decides which child a word names.
+The command model is a recursive tree. The program is the root, each node is a full command, and dispatch sends control from a parent to one child. Aliases and a default command make the match more flexible. External subcommands let one program be a family of separate programs. Next, read [Action Lifecycle](./action-lifecycle/README.md) to learn what a selected command does. Read [Option Parsing](../option-parsing/README.md) to learn how the parse loop separates options from operands.

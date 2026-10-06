@@ -4,82 +4,116 @@ repo: pallets/flask
 sources:
   - src/flask/sessions.py
   - src/flask/json/tag.py
+  - src/flask/ctx.py
   - src/flask/app.py
 ---
 
 ```mermaid
 flowchart LR
-    subgraph Incoming
-        C1[Signed cookie] --> VER{Signature valid and fresh?}
-        VER -->|yes| LOAD[Load into the session]
-        VER -->|no| EMPTY[Start an empty session]
+    subgraph IN ["Request"]
+        C1["Session cookie"] --> VER{"Signature valid and cookie not too old?"}
+        VER -->|"yes"| LOAD["Session with the cookie data"]
+        VER -->|"no"| EMPTY["Empty session"]
     end
-    LOAD --> USE[Your code reads and writes the session]
+    LOAD --> USE["Your code reads and writes the session"]
     EMPTY --> USE
-    subgraph Outgoing
-        USE --> CHG{Was it modified?}
-        CHG -->|yes| SIGN[Serialize and sign]
-        SIGN --> SET[Set a fresh cookie on the response]
-        CHG -->|no| SKIP[Leave the cookie alone]
+    subgraph OUT ["Response"]
+        USE --> CHG{"Modified, or permanent with refresh?"}
+        CHG -->|"yes"| SIGN["Serialize and sign"]
+        SIGN --> SET["Set a new cookie"]
+        CHG -->|"no"| SKIP["Do not set the cookie"]
     end
 ```
 
 ## Abstract
 
-A session lets an application remember small amounts of data about a visitor across requests — who they are logged in as, a shopping cart, a one-time notice. By default Flask stores that data nowhere on the server: it packs the session into a *signed cookie* that lives in the visitor's browser. The signature, keyed by the application's secret, means the data can be read by the browser but not forged or tampered with. On each request the cookie is verified and loaded; if your code changes the session, a fresh signed cookie is written onto the response.
+A session lets an application keep a small quantity of data about a visitor between requests. Examples are the identity of a user after login and a short message for the next page. By default, Flask keeps no session data on the server. It puts the session data into a signed cookie in the browser of the visitor. The signature uses the secret key of the application, thus the browser can read the data but cannot change it. On each request, Flask verifies and loads the cookie, and it writes a new signed cookie when necessary.
 
 ## Introduction
 
-The web's request-response cycle is stateless: each request arrives with no memory of the last. Sessions are the standard way to bridge that gap, giving the illusion of continuity. The question every framework must answer is *where* the remembered data lives. Storing it on the server is one option, but it requires shared storage and cleanup. Flask's default takes the opposite tack: keep the data with the client, and make it trustworthy with cryptography.
+HTTP is stateless, because each request has no memory of the previous request. Sessions give continuity across requests. Each framework must decide where to keep the session data. Storage on the server is one option, but it needs a shared store and cleanup. The default of Flask is the opposite: Flask keeps the data with the client and protects it with a signature.
 
-This works because of *signing*. The session's contents are serialized and stamped with a signature derived from a secret only the server knows. The browser holds the cookie and sends it back on every request, but cannot alter it without invalidating the signature. The server therefore trusts what it reads, within a freshness window. The cost is that the data is visible to the client and limited in size — so sessions hold identifiers and small flags, not secrets or bulk data. Crucially, the entire mechanism is defined behind a replaceable interface, so an application that outgrows client-side storage can swap in a server-side scheme without changing how handlers use the session.
+The signature makes this design safe. Flask serializes the session data and signs it with a key that only the server knows. The browser sends the cookie back with each request. If someone changes the cookie, the signature becomes invalid. But the client can see the data, and a cookie has a size limit. Thus a session must hold identifiers and small flags, not secrets or large data.
+
+All of this behavior is behind a session interface that you can replace. If an application needs storage on the server, it can use a different session interface. The view functions then use the session in the same way as before.
 
 ## Related Work
 
-- Parent: [Flask](../README.md) — the project overview.
-- [The Context System](../the-context-system/README.md) — the session is one of the values a context carries and is exposed as an ambient global.
-- [Application and Request Lifecycle](../application-and-request-lifecycle/README.md) — the session is read on first access and written during response finalizing.
-- [Configuration](../configuration/README.md) — the secret key, cookie attributes, and lifetime are all configuration values.
+- Parent: [Flask](../README.md) — This paper gives the overview of the project.
+- [The Context System](../the-context-system/README.md) — This paper describes the context, which opens the session and gives it to your code.
+- [Application and Request Lifecycle](../application-and-request-lifecycle/README.md) — This paper shows when Flask opens the session and when it saves the session.
+- [Configuration](../configuration/README.md) — This paper describes the settings for the secret key, the cookie, and the session lifetime.
 
 ## Description
 
-**The session behaves like a dictionary.** To your code, the session is just a mapping you read from and write to. It quietly tracks whether it has been *accessed* and whether it has been *modified*, and those two flags drive the framework's decisions about caching headers and whether a new cookie needs to be sent.
+**The session acts as a dictionary.** For your code, the session is a mapping. You read values from it and write values to it. The session has two flags. The modified flag becomes true when your code changes the session. The accessed flag becomes true when your code gets the session through the request context. These flags control the cookie and the cache headers of the response.
 
-**Reading on the way in.** The session is loaded lazily — the first time your code touches it during a request. Flask takes the incoming signed cookie, checks its signature against the application's secret and its age against the configured lifetime, and if both hold, deserializes the contents into the session. A missing, forged, or stale cookie simply yields a fresh empty session rather than an error.
+**Open the session.** Flask opens the session when it pushes the request context. This occurs before the route match, thus a custom URL converter can use the session. The session interface reads the session cookie from the request. Then it does these checks in this order:
+
+1. If the application has no secret key, Flask uses a null session. A null session lets your code read, but it raises an error on each write.
+2. If the request has no session cookie, Flask uses a new empty session.
+3. If the signature is not valid, Flask uses a new empty session.
+4. If the cookie is older than the session lifetime, Flask uses a new empty session.
+5. Otherwise, Flask loads the cookie data into the session.
+
+A bad cookie does not cause an error. The visitor only gets an empty session.
 
 ```mermaid
 sequenceDiagram
-    participant Req as Request
-    participant Sess as Session
+    participant Ctx as Request context
+    participant SI as Session interface
+    participant View as View function
     participant Resp as Response
-    Req->>Sess: first access loads from the signed cookie
-    Note over Sess: valid signature, within lifetime
-    Sess-->>Req: session data available as a mapping
-    Req->>Sess: handler reads and maybe writes
-    Sess->>Resp: on finalize, if modified, sign and set cookie
-    Note over Resp: also mark the response as varying by cookie
+    Ctx->>SI: Open the session
+    SI-->>Ctx: Session from the signed cookie
+    View->>Ctx: Read or write the session
+    Note over Ctx: Set the accessed flag
+    Ctx->>SI: Save the session onto the response
+    SI->>Resp: Set or delete the cookie and update the Vary header
 ```
 
-**Signing on the way out.** During response finalizing, Flask decides what to do with the session. If it was never touched, nothing changes. If it was accessed, the response is marked as varying by cookie so caches treat different visitors distinctly. If it holds data, the contents are serialized, signed, and written as a fresh cookie carrying the configured attributes — path, domain, security flags, same-site policy, and expiration. If the session was emptied, the cookie is cleared. To survive secret rotation, the framework can verify against a list of former secrets while always signing with the current one.
+**Save the session.** After the after-request hooks, Flask gives the session to the session interface. Flask does not save a null session. For other sessions, the save step does these checks:
 
-**A richer-than-JSON payload.** Because a signed cookie is fundamentally text, session contents must be serialized to a textual form. Flask uses an enhanced serialization that preserves common Python values a plain text format would flatten — such as dates, sets, and byte strings — by tagging them so they round-trip faithfully. This is why a session can hold more than bare strings and numbers.
-
-**Permanence and lifetime.** A session can be marked *permanent*, which ties its cookie's expiration to a configured lifetime rather than ending when the browser closes. The freshness check on the way in uses the same lifetime, so an old cookie is rejected even if the browser still holds it.
+- If your code accessed the session, Flask adds the cookie to the Vary header. Thus caches keep separate copies for different visitors.
+- If the session is empty and your code modified it, Flask deletes the cookie.
+- If the session has data, Flask sets a new cookie when the session was modified.
+- If the session is permanent and the refresh setting is on, Flask also sets a new cookie. This setting is on by default.
 
 ```mermaid
 flowchart TD
-    START[Session at end of request] --> A{Accessed at all?}
-    A -->|no| DONE[Do nothing]
-    A -->|yes| V[Mark response varies by cookie]
-    V --> E{Empty now?}
-    E -->|yes and was modified| DEL[Delete the cookie]
-    E -->|no| P{Worth setting?}
-    P -->|yes| WRITE[Sign and write a fresh cookie]
-    P -->|no| DONE
+    START["Session at the end of the request"] --> A{"Accessed?"}
+    A -->|"yes"| V["Add Cookie to the Vary header"]
+    A -->|"no"| E
+    V --> E{"Empty?"}
+    E -->|"yes"| M{"Modified?"}
+    M -->|"yes"| DEL["Delete the cookie"]
+    M -->|"no"| DONE["Do nothing more"]
+    E -->|"no"| S{"Modified, or permanent with refresh?"}
+    S -->|"yes"| WRITE["Sign and set a new cookie"]
+    S -->|"no"| DONE
 ```
 
-**A replaceable interface.** All of this lives behind a single, swappable session interface. The signed-cookie scheme is merely the default implementation. An application can provide its own — backed by a server-side store, for instance — and every handler keeps using the session exactly as before, because the mapping it sees never changes.
+**Cookie attributes.** The session interface takes all attributes of the cookie from the configuration. The table shows the attributes and their default values.
+
+| Attribute | Default value |
+|---|---|
+| Name | "session" |
+| Domain | Not set, thus the browser sends the cookie only to the same host |
+| Path | The application root, which is "/" by default |
+| HTTP only | On |
+| Secure | Off |
+| SameSite | Not set |
+| Partitioned | Off |
+| Expiration | The current time plus the session lifetime, for permanent sessions only |
+
+**Change of the secret key.** You can give a list of fallback keys in the configuration. Flask always signs with the current secret key. When Flask verifies a cookie, it also accepts signatures from the fallback keys. Thus old sessions stay valid while you change the secret key.
+
+**Serialization.** A signed cookie holds text, thus Flask must serialize the session data to text. Flask uses a tagged JSON serializer. This serializer keeps some Python values that plain JSON cannot keep. It adds a tag to each of these values, so that it can restore them exactly. The tagged types are tuples, byte strings, safe markup strings, UUIDs, and date-time values. Flask also tags a dictionary when its only key looks like a tag.
+
+**Permanent sessions and lifetime.** A session can be permanent. The cookie of a permanent session has an expiration time, which is the current time plus the session lifetime. The cookie of a session that is not permanent ends when the browser closes. The age check on the way in always uses the session lifetime. The default session lifetime is 31 days.
+
+**A replaceable interface.** The session interface has two main operations: open and save. The signed cookie interface is only the default. An application can set its own session interface, for example one with a store on the server. The view functions do not change, because the session still acts as a mapping. Many requests with the same session can run at the same time. Thus a custom session interface must control concurrent access to its store, if necessary.
 
 ## Conclusion
 
-Sessions give stateless requests a memory, and Flask's default makes that memory tamper-proof by signing it into the visitor's own cookie with the application's secret. The mechanism is stitched into the [request pipeline](../application-and-request-lifecycle/README.md) at load and save time, surfaced through [the context system](../the-context-system/README.md) as an ambient global, and tuned entirely through [configuration](../configuration/README.md). Return to the [project overview](../README.md) for the whole map.
+Sessions give a memory to stateless requests. By default, Flask signs the session data with the secret key and keeps it in a cookie of the visitor. The [request pipeline](../application-and-request-lifecycle/README.md) saves the session onto each response. [The context system](../the-context-system/README.md) opens the session and gives it to your code. The [configuration](../configuration/README.md) controls the secret key, the cookie, and the lifetime. Go back to the [project overview](../README.md) for the full map.

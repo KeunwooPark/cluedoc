@@ -3,6 +3,7 @@ title: Shell Completion
 repo: spf13/cobra
 sources:
   - completions.go
+  - shell_completions.go
   - bash_completions.go
   - bash_completionsV2.go
   - zsh_completions.go
@@ -13,73 +14,96 @@ sources:
 
 ```mermaid
 sequenceDiagram
-    participant U as user hits TAB
-    participant S as shell script
+    participant U as user pushes TAB
+    participant S as completion script
     participant P as the program
-    U->>S: current words + partial word
+    U->>S: typed words and the partial word
     S->>P: hidden completion request
-    P->>P: walk tree, gather candidates
-    P-->>S: candidates + a directive
-    S-->>U: show completions
+    P->>P: walk the tree, collect candidates
+    P-->>S: candidates and a directive
+    S-->>U: show the candidates
 ```
 
 ## Abstract
 
-Shell completion lets a user press the tab key and have the shell fill in command names, flag names, and even flag or argument values. Cobra powers this two ways at once: it emits a small startup script for each major shell, and it answers the live completion queries that script sends back to the program. Because the program itself computes the candidates by walking its own command tree, completions always match what the tool can actually do — including values that can only be known at run time.
+With shell completion, the user pushes the tab key, and the shell completes the word. The shell can complete command names, flag names, flag values, and positional arguments. Cobra supplies two parts for this capability. It makes a *completion script* for each of four shells, and it answers the *completion requests* that the script sends to the program. The program itself finds the *candidates* with its own command tree. Thus, the candidates always agree with what the program can do, and they can include values that exist only at run time.
 
 ## Introduction
 
-Tab-completion is one of the strongest usability features a command-line tool can offer, but it is awkward to build. The traditional approach writes a completion script by hand in each shell's arcane scripting language, duplicating the tool's structure; that script then rots as the tool changes. Worse, a static script cannot complete values that depend on live state, such as the names of currently running jobs.
+Shell completion makes a command-line tool much easier to use. But it is difficult to make. In the old method, the author writes a completion script by hand for each shell, in the script language of that shell. This script copies the structure of the tool, and it becomes incorrect when the tool changes. Also, a static script cannot complete values that change at run time, for example the names of the jobs that run now.
 
-Cobra removes both problems by making the program its own completion engine. A generated startup script is deliberately thin: when the user presses tab, it simply asks the program what the completions should be, passing along the words typed so far. The program walks the same command tree it uses for everything else, produces the candidates, and returns them together with a directive telling the shell how to treat them. One engine serves every supported shell, and because the program computes results at the moment of the keypress, completions can reflect the real, current state of the system.
+Cobra solves both problems because the program does the completion work itself. The completion script is small. When the user pushes the tab key, the script sends the typed words to the program and asks for candidates. The program walks the same command tree that it uses for all other tasks. It returns the candidates and a *directive*, which tells the shell how to use them. One *completion engine* in the program serves all shells.
 
 ## Related Work
 
-- Parent: [Cobra](../README.md) — the framework overview.
-- [Command Tree](../command-tree/README.md) — the structure walked to find command-name candidates.
-- [Flag Handling](../flag-handling/README.md) — flag names and grouping shape which flags are suggested.
-- [Argument Validation](../argument-validation/README.md) — a command's legal argument values become candidates.
-- [Help & Usage](../help-and-usage/README.md) — the descriptions attached to candidates come from the same command facts.
+- Parent: [Cobra](../README.md) gives the overview of the framework.
+- [Command Tree](../command-tree/README.md) shows the structure that the engine walks to find command names.
+- [Execution & Dispatch](../execution-and-dispatch/README.md) shows the walk that the engine also uses to find the target command.
+- [Flag Handling](../flag-handling/README.md) shows how required flags and flag groups change the flag suggestions.
+- [Argument Validation](../argument-validation/README.md) shows the list of permitted values, which also gives candidates.
+- [Help & Usage](../help-and-usage/README.md) shows the short descriptions that also go next to the candidates.
 
 ## Description
 
-**The split between script and engine.** Completion has two halves. The static half is a startup script the framework can generate for each supported shell; the user installs it once. The dynamic half is a hidden request the program answers every time the user presses tab. The script's only real job is to relay the current words to the program and display whatever comes back, so the intelligence lives in the program, not the script.
+**The script and the engine.** Shell completion has two parts. The static part is the completion script, which the framework makes. The user installs this script one time. The dynamic part is a hidden completion request, which the program answers at each push of the tab key. The script only sends the words to the program and shows the result. Thus, the logic is in the program, not in the script.
 
 ```mermaid
 flowchart LR
-    GEN["program generates
-    a shell script"] --> INSTALL["user installs it once"]
-    INSTALL --> TAB["every TAB press:
-    script asks the program"]
-    TAB --> ANS["program answers
-    with candidates"]
+    GEN["the program makes
+    a completion script"] --> INSTALL["the user installs it one time"]
+    INSTALL --> TAB["each TAB: the script
+    sends a completion request"]
+    TAB --> ANS["the program returns
+    candidates and a directive"]
 ```
 
-**Deciding what to suggest.** When a completion request arrives, the program figures out where in the tree the partial line points and what the user is completing. If they are partway through a command word, it offers matching subcommand names. If they are completing a flag name, it offers the flags in scope. If they are completing a value, it looks for a completer attached to that flag or, for a positional argument, the command's declared legal values — which may be a fixed list or a function that computes candidates on the spot, giving access to live state.
+**The hidden request command.** The program answers completion requests through a hidden command. The framework adds this command only when the shell calls it. Thus, the command does not change the tree in a normal run. The command has two names: one name gives candidates with descriptions, and the other name gives candidates without descriptions. The command writes one candidate on each line, and the last line contains the directive as a number. The command writes debug messages to the error stream, and the script ignores them.
+
+**Selection of candidates.** When a completion request arrives, the engine finds the target command with the same walk as dispatch. Then it finds which type of word the user completes. If the user set the help flag or the version flag, the engine gives no candidates. The diagram shows the other cases.
 
 ```mermaid
 flowchart TD
-    REQ["partial line"] --> WHERE{what is being
-    completed?}
-    WHERE -->|a command word| CMDS["matching subcommand names"]
-    WHERE -->|a flag name| FLAGS["flags in scope"]
-    WHERE -->|a flag or arg value| VALS["attached completer
-    or legal values"]
+    REQ["partial line"] --> WHERE{"Which type of word?"}
+    WHERE -->|"flag value"| FV["file extensions, directories,
+    or the completion function of the flag"]
+    WHERE -->|"flag name"| FN["required flags first,
+    then the other flags that are not set"]
+    WHERE -->|"other word"| OW["subcommand names,
+    permitted values, or the
+    completion function of the command"]
 ```
 
-**Directives.** Alongside the candidates, the program returns a directive — a small set of instructions telling the shell how to behave: whether to add a trailing space, whether to fall back to file-name completion when nothing matches, whether to restrict results to files of a certain extension or to directories, and whether to preserve the given order rather than re-sort. This lets the same mechanism produce anything from a closed list of choices to filesystem-aware completion.
+The list that follows gives the details of each case:
 
-**Descriptions and active help.** Shells that can show an annotation beside each candidate receive the command or flag's short description, so completion doubles as inline documentation. Going further, the program can inject *active help* — short guidance messages surfaced during completion to coach the user through a complex invocation. Active help can be toggled off through the environment when it would be noise.
+- **Flag value.** The author can mark a flag so that the shell completes only files with given extensions or only directories. Otherwise, the engine calls the completion function that the author registered for the flag.
+- **Flag name.** If the command has required flags that are not set, the engine suggests only these flags. Otherwise, it suggests all flags that the user did not set. A flag that can occur many times stays in the list. Hidden flags and deprecated flags do not show.
+- **Other word.** If the user typed no positional argument and no local flag yet, the engine suggests the names of the visible subcommands. Then it adds the permitted values of the command, but only for the first positional argument. If the command has no list of permitted values, the engine calls the completion function of the command. This function can calculate candidates from the current state of the system.
 
-**Coverage and the built-in command.** The framework can generate scripts for the widely used shells, each with an option to omit descriptions for shells or users that prefer terseness. A completion command is added to the program automatically so users can obtain the right script without the author wiring anything up, though this can be disabled or hidden. Flag groups also influence suggestions: members of a "required together" group pull their companions into the suggestions, while a chosen member of a mutually exclusive group suppresses its rivals — the connection to [Flag Handling](../flag-handling/README.md).
+**Directives.** With the candidates, the program returns a directive. A directive is a set of instructions for the shell:
+
+| Directive | The shell does this |
+|---|---|
+| Default | It uses its default behavior, for example file completion. |
+| Error | It ignores the candidates. |
+| No space | It does not add a space after the completed word. |
+| No file completion | It does not complete file names when there are no candidates. |
+| Filter file extensions | It completes only files with the given extensions. |
+| Filter directories | It completes only directory names. |
+| Keep order | It keeps the order of the candidates and does not sort them. |
+
+The author can set a different default directive on a command. That directive applies to the command and to the commands below it.
+
+**Descriptions and active help.** Some shells can show a description next to each candidate. For these shells, the engine adds the short description of the command or the usage text of the flag. The user can turn off descriptions with an environment variable. The engine can also add *active help*, which is a short message that helps the user while the user types. The shell shows these messages below the candidates. The user can turn off active help for one program or for all programs with an environment variable.
+
+**The completion command and the four shells.** The framework adds a *completion command* to the root command. This command has one subcommand for each shell, and each subcommand writes the completion script. The framework adds the completion command only if the root command has other subcommands. Thus, a program with only a root command does not get a new subcommand. The author can hide the completion command, turn it off, or put it in a command group. Each subcommand also has a flag that removes the descriptions from the script.
 
 ```mermaid
 flowchart LR
-    subgraph "generated for"
+    subgraph SHELLS ["Completion scripts for"]
     B["bash"]
     Z["zsh"]
     F["fish"]
-    P["powershell"]
+    P["PowerShell"]
     end
     ENG["one completion engine
     in the program"] --> B
@@ -88,6 +112,8 @@ flowchart LR
     ENG --> P
 ```
 
+The framework also keeps an old generator for bash. This generator makes a large static script that contains the tree. The static script sends a completion request to the program only for dynamic values, and it does not show active help. The completion command uses the newer bash script, which is small.
+
 ## Conclusion
 
-Shell completion is Cobra's self-description turned interactive. A thin generated script relays each tab press to the program, which walks its own tree to produce candidates — command names, flags, and values that may be computed live — and returns them with a directive and, optionally, descriptions and coaching hints. One engine covers every supported shell and stays correct as the tool evolves. This closes the loop opened by the [Command Tree](../command-tree/README.md): the same structure that organizes a program also teaches users how to drive it.
+Shell completion uses the data of the command tree to help the user while the user types. A small completion script sends each tab key push to the program. The program walks its own tree and finds candidates: command names, flags, and values that it can calculate at run time. It returns the candidates with a directive, descriptions, and active help messages. One engine serves all four shells and stays correct when the tool changes. Thus, the [Command Tree](../command-tree/README.md) organizes the program and also teaches the user how to use it.

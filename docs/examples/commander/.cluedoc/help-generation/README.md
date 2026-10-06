@@ -8,12 +8,14 @@ sources:
 
 ```mermaid
 flowchart TD
-    DECL["the command's declarations"] --> USAGE["usage line"]
+    DECL["the declarations of the command"] --> USAGE["usage line"]
+    DECL --> DESC["description"]
     DECL --> ARGS["arguments section"]
-    DECL --> OPTS["options section"]
-    DECL --> GLOB["inherited options section"]
-    DECL --> CMDS["subcommands section"]
-    USAGE --> FMT["laid out in aligned columns"]
+    DECL --> OPTS["options sections"]
+    DECL --> GLOB["global options section"]
+    DECL --> CMDS["commands sections"]
+    USAGE --> FMT["align the columns and wrap the text"]
+    DESC --> FMT
     ARGS --> FMT
     OPTS --> FMT
     GLOB --> FMT
@@ -23,58 +25,91 @@ flowchart TD
 
 ## Abstract
 
-Help generation assembles the usage screen a program prints when asked — or when it refuses an invocation. Crucially it is *derived*, not written: the same declarations that drive parsing are read back to produce the usage line, the lists of arguments, options, inherited options, and subcommands, all wrapped and aligned to the terminal. Because it reads the live model, the help can never drift out of sync with what the program actually accepts.
+Help generation makes the help screen that a program shows when the user asks for it. The program can also show it when it rejects a command line. The author does not write the help screen. Commander makes it from the same declarations that the parse loop uses. The screen has a usage line and lists of arguments, options, global options, and subcommands. Because Commander reads the live declarations, the help screen always agrees with the program.
 
 ## Introduction
 
-A command line tool is only usable if it can explain itself. Hand-written help is a maintenance trap: add an option, forget the help, and the documentation lies. The cure is to generate the screen from the single source of truth — the command's own declared shape — so adding a capability updates its documentation for free.
+A command line tool must be able to tell the user how to use it. Help text that the author writes by hand is difficult to keep correct. If an author adds an option and forgets the help text, the help text becomes incorrect. Commander solves this problem because it makes the help screen from the declarations of the command. Thus, when an author adds an option, the help screen shows it immediately.
 
-The reader needs to see help as a *rendering pass* over the model. It gathers the visible pieces of a command, decides their human-readable form, measures them so columns line up, groups and sorts them, and wraps everything to the available width. Every step is customisable, but the default is a clean, conventional screen.
+The reader must think of help as a *rendering pass* over the declarations. The pass has these steps:
+
+1. It collects the visible items of a command.
+2. It makes a text form for each item.
+3. It measures the items so that the columns align.
+4. It puts the items into groups and sorts them.
+5. It wraps the text to the available width.
+
+An author can change each step, but the default result is a clear, usual help screen.
 
 ## Related Work
 
 - Parent: [Commander.js](../README.md) — help as one of the support capabilities.
-- Help reads the same declarations used by [Option Parsing](../option-parsing/README.md) and [Positional Arguments](../positional-arguments/README.md).
-- The subcommand list comes from the [Command Model](../README.md).
-- Help is often shown as part of refusing bad input — see [Error Handling](../error-handling/README.md).
+- The declarations that help reads: [Option Parsing](../option-parsing/README.md) and [Positional Arguments](../positional-arguments/README.md).
+- The tree that gives the list of subcommands: [Command Model](../command-model/README.md).
+- The help screen as a part of an error: [Error Handling](../error-handling/README.md).
 
 ## Description
 
-**What appears, and what is hidden.** A rendering begins by collecting the *visible* members of a command — its arguments, its own options, options inherited from ancestors, and its subcommands — filtering out anything marked hidden and folding in the automatic help and version entries. Each collected item is reduced to two strings: a *term* (how you would type it) and a *description* (what it does).
+**Visible items and hidden items.** The rendering pass starts when it collects the *visible* items of a command. These items are as follows:
+
+- The arguments. This section shows only if at least one argument has a description.
+- The options of the command, plus the built-in help option. If an option of the author uses the same flag as the help option, the help option does not show that flag.
+- The global options, which are the options of the ancestors. This section shows only if the author turns it on.
+- The subcommands, plus the built-in help command if the command has one.
+
+The pass does not show items that the author marks as hidden. The pass changes each item into two text values: a *term* and a *description*. The term tells how to write the item. The description tells what the item does.
 
 ```mermaid
 flowchart LR
-    CMD["command"] --> VIS["gather visible items"]
-    VIS --> TERM["term: how to type it"]
+    CMD["command"] --> VIS["collect the visible items"]
+    VIS --> TERM["term: how to write it"]
     VIS --> DESC["description: what it does"]
-    TERM --> PAIR["term / description pairs"]
+    TERM --> PAIR["pairs of term and description"]
     DESC --> PAIR
 ```
 
-**The usage line.** At the top sits a synopsis: the chain of command names, a placeholder for options, the declared arguments in order with their required or optional brackets, and a hint that subcommands exist. This one line tells a reader the overall shape before the detail.
+The description of an option can also show extra data in parentheses. This data can include the choice list, the default value, the preset value, and the environment variable. The description of an argument can show its choice list and its default value. In the commands section, a subcommand shows its short summary if it has one.
 
-**Alignment by measurement.** To produce tidy columns, the renderer first measures the widest term across each section, then pads every term to that width so descriptions start at a common column. Long descriptions are wrapped to the remaining width, and continuation lines are indented to stay under their description column.
+**The usage line.** The first line of the screen is a summary of the full command line. It shows the names of the ancestors and the command, plus the first alias. Then it shows a mark for options and a mark for subcommands. Then it shows the declared arguments in order, with angle brackets or square brackets. Thus, the reader sees the full form of the command before the details. An author can replace the usage text.
 
-```mermaid
-flowchart TD
-    ITEMS["term / description pairs"] --> MEASURE["measure widest term"]
-    MEASURE --> PAD["pad terms to that width"]
-    PAD --> WRAP["wrap descriptions to remaining width"]
-    WRAP --> COLS["two clean columns"]
-```
-
-**Grouping, sorting, and styling.** Items can be assigned to named groups so related options or subcommands appear under their own headings, and within a section the order can be sorted or left as declared. A separate styling layer can decorate terms and descriptions — for emphasis or colour — without touching the layout logic, and it measures display width carefully so styled text still aligns. Authors may also inject extra text before or after the generated body.
-
-**Two ways in.** The screen can be requested explicitly — a help flag or a help command — or produced implicitly when a command with subcommands is invoked with nothing to do, or when input is refused. In the explicit case the framework prints and exits; in the implicit case it is part of guiding the user back on track.
+**The pass measures the terms to align the columns.** First, the pass finds the widest term in all sections together. Then it adds spaces to each term to make it that width. Thus, all descriptions start in the same column. The pass wraps long descriptions to the width that is available. It indents the continuation lines to the same column as the description.
 
 ```mermaid
 flowchart TD
-    T1["help flag or help command"] --> SHOW["render and print"]
-    T2["command needs a subcommand<br/>but none given"] --> SHOW
-    T3["input refused"] --> SHOW
-    SHOW --> EXIT["exit with an appropriate code"]
+    ITEMS["pairs of term and description"] --> MEASURE["find the widest term in all sections"]
+    MEASURE --> PAD["add spaces to each term"]
+    PAD --> Q{"40 or more columns<br/>for the description?"}
+    Q -- yes --> WRAP["wrap the description"]
+    Q -- no --> KEEP["do not wrap"]
+    WRAP --> COLS["two aligned columns"]
+    KEEP --> COLS
 ```
+
+These rules control the width:
+
+- The help width is the width of the terminal. If the output is not a terminal, the width is 80 columns.
+- If less than 40 columns are available for descriptions, the pass does not wrap the text.
+- If a description has its own indented lines, the pass does not wrap it.
+
+**Groups, sort order, and style.** An author can put options or subcommands into named groups. Each group shows under its own heading. The author can sort the items in a section, or keep the order of the declarations. A separate style layer can add color or emphasis to each part of the screen. This layer does not change the layout. The pass measures the width without the color codes, thus the columns stay aligned. If the output does not support color, Commander removes the color codes. The usual color settings in environment variables also apply. An author can also add text before or after the screen.
+
+**Three ways to show the help screen.** The table shows when the help screen appears and how the program exits.
+
+| Trigger | Output stream | Exit code |
+|---|---|---|
+| The user gives the help option or the help command | Standard output | 0 |
+| A command with subcommands gets no subcommand and has no action handler | Standard error | 1 |
+| An error occurs and the author turned on help after errors | Standard error | The exit code of the error |
+
+```mermaid
+flowchart TD
+    T1["help option or help command"] --> SHOW1["show help, exit with 0"]
+    T2["subcommand necessary<br/>but not given"] --> SHOW2["show help as an error, exit with 1"]
+    T3["an error with<br/>help after errors on"] --> SHOW3["show the message and help, exit with the error code"]
+```
+
+For errors, the author can also give a short line of text in place of the full help screen.
 
 ## Conclusion
 
-Help generation is a rendering pass over the live command model: it gathers visible terms and descriptions, builds a synopsis, measures and pads for aligned columns, groups and styles, and wraps to the terminal — so documentation is always a byproduct of declaration rather than a parallel artifact to maintain. To see the declarations it renders, revisit [Option Parsing](../option-parsing/README.md) and [Positional Arguments](../positional-arguments/README.md); to see help's role in guiding mistakes, read [Error Handling](../error-handling/README.md).
+Help generation is a rendering pass over the live declarations. It collects the visible terms and descriptions and makes a usage line. It aligns the columns, puts items into groups, adds style, and wraps the text to the terminal. Thus, the help screen is a result of the declarations, and the author does not maintain it separately. To learn about the declarations that it shows, read [Option Parsing](../option-parsing/README.md) and [Positional Arguments](../positional-arguments/README.md). To learn how help helps the user after a mistake, read [Error Handling](../error-handling/README.md).

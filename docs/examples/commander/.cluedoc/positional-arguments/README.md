@@ -8,74 +8,86 @@ sources:
 
 ```mermaid
 flowchart LR
-    OPS["leftover operands<br/>after options removed"] --> SLOT1["required slot"]
+    OPS["operands<br/>after the parse loop removes options"] --> SLOT1["required slot"]
     OPS --> SLOT2["optional slot"]
-    OPS --> SLOT3["variadic slot<br/>gathers the rest"]
-    SLOT1 --> OUT["ordered, coerced arguments"]
+    OPS --> SLOT3["variadic slot<br/>collects all other operands"]
+    SLOT1 --> OUT["arguments in order, after the custom parsers"]
     SLOT2 --> OUT
     SLOT3 --> OUT
 ```
 
 ## Abstract
 
-Positional arguments are the ordered operands a command consumes once the flags have been stripped away — the file names, targets, and values that a verb acts on. This paper covers how a command declares the shape of its argument list, how required, optional, and variadic slots are filled from the leftover words, and how each argument can be coerced or restricted just like an option's value.
+Positional arguments are the operands that a command uses after the parse loop removes the options. Examples are file names, targets, and values for a verb. This paper tells how a command declares its argument slots. It also tells how Commander fills required, optional, and variadic slots from the operands. Each argument can have a custom parser or a choice list, as an option can.
 
 ## Introduction
 
-Not everything on a command line is a flag. After options are recognised and set aside, what remains are plain words whose *meaning comes from their position*: the first is the source, the second the destination, and so on. A command needs to declare how many such words it expects, which are compulsory, which may be omitted, and whether a final slot should soak up any number of trailing words.
+Not all words on a command line are options. After the parse loop removes the options, plain words stay. The *position* of each word gives its meaning. For example, the first word is the source and the second word is the destination. A command must declare how many words it expects and which words are necessary. It must also declare if a last slot collects all other words.
 
-The reader needs one distinction: options are matched by name and may appear in any order, but arguments are matched by *place*. Because of that, the rules are about counting and ordering — is a required slot filled, is there an optional slot to receive an extra word, does a variadic slot exist to gather the remainder — rather than about recognition.
+The reader must know one difference. Commander finds an option by its name, and options can occur in any order. But Commander finds an argument by its *position*. Thus, the rules for arguments are about the count and the order of words. They are not about names.
 
 ## Related Work
 
-- Parent: [Commander.js](../README.md) — where operands fit in the overall flow.
-- Operands are set aside by the parse loop in [Option Parsing](../option-parsing/README.md).
-- Coercion and choice restrictions mirror those in [Value Sources](../option-parsing/value-resolution/README.md).
-- The filled arguments are delivered to a handler via [Action Lifecycle](../command-model/action-lifecycle/README.md).
-- Too few or too many operands become messages via [Error Handling](../error-handling/README.md).
+- Parent: [Commander.js](../README.md) — the place of the operands in the full flow.
+- The parse loop that keeps the operands: [Option Parsing](../option-parsing/README.md).
+- The same custom parser and choice list for options: [Value Sources](../option-parsing/value-resolution/README.md).
+- The action handler that gets the arguments: [Action Lifecycle](../command-model/action-lifecycle/README.md).
+- The messages for too few or too many operands: [Error Handling](../error-handling/README.md).
 
 ## Description
 
-**Three kinds of slot.** Each declared argument is one of three shapes, signalled by how it is written:
+**There are three kinds of slot.** The declaration of an argument sets its kind. The table shows the kinds and their written forms.
+
+| Kind of slot | Written form | Behavior |
+|---|---|---|
+| Required | A name in angle brackets, or a name without brackets | The user must give a word. |
+| Optional | A name in square brackets | The user can omit the word. Then the slot uses its default value. |
+| Variadic | A name that ends with three dots | The slot collects all other operands into a list. |
 
 ```mermaid
 flowchart TD
-    A["a declared argument"] --> R["required<br/>must be supplied"]
-    A --> O["optional<br/>may be omitted, can carry a default"]
-    A --> V["variadic<br/>gathers all remaining operands into a list"]
+    A["a declared argument"] --> R["required slot<br/>the user must give a word"]
+    A --> O["optional slot<br/>can have a default value"]
+    A --> V["variadic slot<br/>collects all other operands into a list"]
 ```
 
-A required argument must be present. An optional one may be left out, in which case it falls back to its default. A variadic argument is greedy: it collects every remaining operand into a list, so it only makes sense as the last slot.
+A variadic slot takes all other operands. Thus, it is correct only as the last slot.
 
-**Filling the slots.** Once options are removed, the leftover operands are matched to the declared slots left to right. Non-variadic slots each take one word; a variadic slot at the end takes all that remain. Slots with no matching word fall back to their defaults, and a variadic with nothing left becomes an empty list rather than nothing at all.
+**Commander fills the slots from left to right.** After the parse loop removes the options, Commander matches the operands to the slots in order. Each slot that is not variadic takes one word. A variadic slot at the end takes all other words. If no word is available for a slot, the slot uses its default value. If a variadic slot gets no words and has no default value, its value is an empty list.
 
 ```mermaid
 flowchart TD
-    START["operands + declared slots"] --> LOOP{"for each slot"}
-    LOOP --> ISV{"variadic?"}
-    ISV -- yes --> REST["take all remaining operands"]
-    ISV -- no --> ONE{"a word available<br/>at this position?"}
-    ONE -- yes --> TAKE["take that one word"]
-    ONE -- no --> DEF["use the default"]
-    REST --> COERCE["coerce each value"]
-    TAKE --> COERCE
+    START["operands and declared slots"] --> LOOP{"for each slot"}
+    LOOP --> ISV{"variadic slot?"}
+    ISV -- yes --> REST["take all other operands"]
+    ISV -- no --> ONE{"a word at<br/>this position?"}
+    ONE -- yes --> TAKE["take that word"]
+    ONE -- no --> DEF["use the default value"]
+    REST --> PARSE["run the custom parser on each value"]
+    TAKE --> PARSE
     DEF --> NEXT["next slot"]
-    COERCE --> NEXT
+    PARSE --> NEXT
 ```
 
-**Coercion and choices, as with options.** Each argument may carry a custom processor that turns its raw string into a richer value, and for a variadic slot that processor folds across the collected words to build one accumulated result. An argument may also restrict itself to a fixed set of allowed values, rejecting anything outside the set. These are the same value-shaping tools options use, applied by position instead of by name.
+**Custom parsers and choice lists operate as for options.** An argument can have a custom parser that changes its raw text into a different value. For a variadic slot, the custom parser runs on each word in sequence. Each run gets the result of the previous run, and the first run gets the default value. Thus, the parser makes one result from all words. An argument can also have a choice list of permitted values. If a word is not in the list, Commander reports an invalid value error. Commander does not run the custom parser on a default value.
 
-**Counting is checked.** Before the slots are filled the command verifies the arithmetic: too few operands to satisfy the required slots is a failure, and — unless the command opts to tolerate extras — more operands than declared slots is also a failure. This is what lets a command trust that, by the time its handler runs, each declared argument is present and well-formed.
+**Commander checks the count first.** Before Commander fills the slots, it counts the operands. The checks are as follows:
+
+- If a required slot has no word, Commander reports a missing argument error.
+- If there are more operands than slots, Commander reports a "too many arguments" error. This check does not apply when the last slot is variadic.
+- An author can permit extra operands. Then Commander does not report the second error.
+
+Thus, when the action handler runs, each required argument has a value. Commander does these steps also when a command has no action handler.
 
 ```mermaid
 flowchart LR
-    CNT["count operands vs slots"] --> Q1{"enough for<br/>required slots?"}
-    Q1 -- no --> E1["refuse: missing argument"]
-    Q1 -- yes --> Q2{"extras beyond<br/>declared slots?"}
-    Q2 -- yes --> E2["refuse: too many arguments"]
-    Q2 -- no --> OK["fill and coerce"]
+    CNT["count operands and slots"] --> Q1{"a word for each<br/>required slot?"}
+    Q1 -- no --> E1["error: missing argument"]
+    Q1 -- yes --> Q2{"more words than slots,<br/>and the last slot is not variadic?"}
+    Q2 -- yes --> E2["error: too many arguments"]
+    Q2 -- no --> OK["fill the slots and parse"]
 ```
 
 ## Conclusion
 
-Positional arguments are matched by place, not name: required, optional, and variadic slots are filled left to right from the operands the parse loop set aside, coerced and choice-checked like option values, and guarded by a count check that guarantees a well-formed argument list before the handler runs. See [Option Parsing](../option-parsing/README.md) for how operands are separated from flags, or [Value Sources](../option-parsing/value-resolution/README.md) for the coercion machinery these arguments reuse.
+Commander finds positional arguments by their position, not by a name. It fills required, optional, and variadic slots from left to right with the operands from the parse loop. Custom parsers and choice lists change and check the values, as they do for options. A count check makes sure that the argument list is correct before the action handler runs. See [Option Parsing](../option-parsing/README.md) to learn how the parse loop separates operands from options. See [Value Sources](../option-parsing/value-resolution/README.md) for the custom parser that arguments also use.

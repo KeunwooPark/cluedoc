@@ -5,68 +5,110 @@ sources:
   - src/flask/app.py
   - src/flask/sansio/app.py
   - src/flask/sansio/scaffold.py
+  - src/flask/ctx.py
   - src/flask/helpers.py
 ---
 
 ```mermaid
 flowchart LR
-    subgraph Setup
-        DEC[Attach a handler to an address pattern] --> TBL[(The route table)]
+    subgraph Setup ["Setup phase"]
+        DEC["Register a view function for a URL rule"] --> TBL[("Route table")]
     end
-    subgraph Request
-        URL[Incoming address and method] --> MATCH{Match against table}
-        MATCH -->|found| PICK[Named endpoint plus captured values]
-        MATCH -->|no match| E404[Not found]
-        MATCH -->|wrong method| E405[Method not allowed]
-        PICK --> CALL[Call the handler]
+    subgraph Serving ["Serving phase"]
+        URL["Path and method of the request"] --> MATCH{"Match"}
+        MATCH -->|"found"| PICK["Endpoint and URL values"]
+        MATCH -->|"no rule"| E404["404 Not Found"]
+        MATCH -->|"wrong method"| E405["405 Method Not Allowed"]
+        PICK --> CALL["Call the view function"]
     end
-    subgraph Build
-        NAME[Endpoint name plus values] --> GEN[Generate a valid address]
+    subgraph Build ["URL building"]
+        NAME["Endpoint and values"] --> GEN["URL"]
     end
+    TBL --> MATCH
+    TBL --> GEN
 ```
 
 ## Abstract
 
-Routing is how Flask connects a web address to the piece of your code that should answer it. During setup you attach handlers to address patterns; these accumulate in a *route table*. When a request arrives, its path and method are matched against that table to select a named endpoint and to capture any variable parts of the path. The same table works in reverse: given an endpoint name and some values, Flask can *build* a correct address, so links never have to be hand-written and stay consistent when patterns change.
+Routing connects a URL to the view function that answers it. In the setup phase, you register view functions for URL rules. Flask keeps these URL rules in the route table. When a request arrives, Flask matches its path and method against the route table. The match gives an endpoint and the URL values from the variable parts of the path. The route table also works in the opposite direction, because Flask can build a correct URL from an endpoint and values.
 
 ## Introduction
 
-The web identifies things by address. A framework's routing layer is the dictionary that translates between the addresses the outside world uses and the functions the application is written in. Without it, every handler would have to inspect raw paths itself, and every link in a page would be a brittle string.
+The web identifies each resource with a URL. The routing layer translates between the URLs of the outside world and the functions of the application. Without routing, each view function must read the raw path itself. Also, each link in a page is a fixed string that can become incorrect.
 
-Flask's routing has two directions that are easy to conflate but worth separating. *Matching* goes from an address to code: it must handle variable path segments, type conversions, multiple allowed methods, and the difference between "no such page" and "that method is not allowed here." *Building* goes from code to an address: given the name of a destination and the values it needs, produce the canonical link. Because both directions consult the same table, they can never drift apart — a promise that pays off constantly in real applications.
+Routing in Flask has two directions. Matching goes from a URL to code. It must handle variable parts, type conversion, allowed methods, and the difference between "not found" and "method not allowed". URL building goes from code to a URL. It takes an endpoint name and the necessary values and gives the correct link. Both directions use the same route table, thus they always agree.
 
 ## Related Work
 
-- Parent: [Flask](../README.md) — the project overview.
-- [Application and Request Lifecycle](../application-and-request-lifecycle/README.md) — matching is the "dispatch" step of the request pipeline.
-- [Blueprints](../blueprints/README.md) — modules contribute their own routes under a shared prefix, and endpoint names become namespaced.
-- [The Context System](../the-context-system/README.md) — address building relies on the active context to know the current application and request.
+- Parent: [Flask](../README.md) — This paper gives the overview of the project.
+- [Application and Request Lifecycle](../application-and-request-lifecycle/README.md) — This paper shows where matching and dispatch occur in the request pipeline.
+- [The Context System](../the-context-system/README.md) — This paper describes the context, which does the match and keeps the bound route table.
+- [Blueprints](../blueprints/README.md) — This paper describes how blueprints add URL rules with a URL prefix and add a name prefix to endpoints.
+- [Configuration](../configuration/README.md) — This paper describes the settings for URL building outside a request, such as the server name.
 
 ## Description
 
-**Registering a route.** In setup, a handler is bound to an address pattern together with the set of methods it accepts. Flask records the pattern in the route table and remembers the handler under an *endpoint* name — a stable label, defaulting to the handler's own name, that identifies the destination independently of its address. Attempting to register two different handlers under the same endpoint is caught immediately, preventing silent collisions.
+**Route registration.** In the setup phase, you register a view function for a URL rule and a set of HTTP methods. Flask adds the URL rule to the route table. Flask also stores the view function under an endpoint name. The endpoint name is a stable label for the destination. By default, it is the name of the view function. If two different view functions use the same endpoint name, Flask stops with an error.
 
-**Patterns with variables and types.** Address patterns can contain variable segments whose values are captured and passed to the handler. Each variable may declare a converter that both validates the incoming segment and shapes the captured value — for example restricting a segment to whole numbers or allowing it to span multiple path parts. The same converters are used in reverse when building addresses.
+Flask has a shortcut form for each single method: GET, POST, PUT, PATCH, DELETE, and QUERY. If you give no methods, the URL rule accepts only GET. By default, Flask also adds the OPTIONS method to each URL rule. A setting in the configuration turns off this automatic OPTIONS method.
+
+**Variable parts and converters.** A URL rule can have variable parts. Flask captures the value of each variable part and gives it to the view function as a parameter. Each variable part can have a converter. A converter checks the segment of the path and changes it into a typed value. For example, one converter accepts only whole numbers, and another converter accepts a path with slashes. You can register your own converters on the application.
 
 ```mermaid
 flowchart TD
-    IN[Request path and method] --> ADAPT[Bind the table to this request]
-    ADAPT --> TRY{Does any pattern match the path?}
-    TRY -->|no| NF[Signal: not found]
-    TRY -->|yes, but method not allowed| NA[Signal: method not allowed]
-    TRY -->|yes| CONV[Run converters on variable segments]
-    CONV --> RES[Endpoint name plus captured values]
-    RES --> AUTO{Automatic options request?}
-    AUTO -->|yes| OPT[Reply with allowed methods]
-    AUTO -->|no| DISPATCH[Hand to the matched handler]
+    IN["Request arrives"] --> BIND["Make the context and bind the route table"]
+    BIND --> PUSH["Push the context"]
+    PUSH --> SESS["Open the session"]
+    SESS --> TRY{"Does a URL rule match?"}
+    TRY -->|"no"| NF["Keep a 404 error"]
+    TRY -->|"yes, but wrong method"| NA["Keep a 405 error"]
+    TRY -->|"no final slash"| RD["Keep a redirect"]
+    TRY -->|"yes"| RES["Store the endpoint and URL values"]
+    NF --> LATER["Raise the error at dispatch"]
+    NA --> LATER
+    RD --> LATER
+    RES --> AUTO{"Automatic OPTIONS request?"}
+    AUTO -->|"yes"| OPT["Reply with the allowed methods"]
+    AUTO -->|"no"| CALL["Call the view function"]
 ```
 
-**Matching, and the two kinds of miss.** When a request arrives, the table is bound to the specifics of that request and consulted. A successful match yields the endpoint name and a dictionary of captured values that are handed straight to the handler. A path that matches nothing produces a "not found" outcome; a path that matches but with a method the pattern does not allow produces a distinct "method not allowed" outcome. Flask also answers method-discovery requests automatically, replying with the set of methods an address supports without bothering your handler. Redirect-style matches are honored as well, so trailing-slash conventions behave as authors expect.
+**Matching.** Matching occurs when Flask pushes the context for a request. Before that, Flask makes the context and binds the route table to the host and the path. If the configuration has a list of trusted hosts, Flask checks the host of the request against that list. When Flask pushes the context, the context opens the session first. Thus a custom converter can read the session. After that, the context matches the path and the method against the route table.
 
-**Building addresses in reverse.** The counterpart to matching is generating links. Given an endpoint name and the values its pattern needs, Flask produces a valid, correctly escaped address. Extra values that are not part of the pattern are appended as query parameters. Because building reads the same table that matching does, renaming or restructuring an address only requires changing the pattern; every generated link updates with it. Authors can also register defaults that are folded into every build for a given endpoint, and hooks that inject shared values.
+**The results of a match.** A successful match stores the endpoint and the URL values on the request. A failed match does not stop the request immediately. Flask keeps the routing error and raises it when it dispatches the request. Thus the before-request hooks run also for a request that gets a 404 error. The possible results are:
 
-**Endpoints as the stable name.** The endpoint, not the raw path, is the identity of a destination. This indirection is what lets modules be mounted under different prefixes, lets addresses evolve without breaking links, and gives the framework a clean key for associating handlers, defaults, and build rules. When applications are split into modules, endpoint names gain a namespace prefix so that identically named handlers in different modules never clash.
+| Result | Cause | Response |
+|---|---|---|
+| Match | A URL rule accepts the path and the method | Flask calls the view function |
+| Not found | No URL rule accepts the path | 404 error |
+| Method not allowed | A URL rule accepts the path, but not the method | 405 error |
+| Redirect | The URL rule ends with a slash, but the path does not | Redirect to the path with the slash |
+| Automatic OPTIONS | The method is OPTIONS and the URL rule has automatic OPTIONS | Flask replies with the allowed methods |
+
+**URL building.** URL building is the opposite of matching. Flask takes an endpoint name and values and builds a valid URL with correct escaping. If a value is not part of the URL rule, Flask adds it to the query string. If an endpoint name starts with a dot, Flask adds the name of the current blueprint before it. Before Flask builds the URL, it runs the URL default functions for the endpoint. These functions can add shared values, such as a language code.
+
+```mermaid
+flowchart TD
+    NAME["Endpoint and values"] --> DOT{"Starts with a dot?"}
+    DOT -->|"yes"| BPN["Add the name of the current blueprint"]
+    DOT -->|"no"| DEF
+    BPN --> DEF["Run the URL default functions"]
+    DEF --> BLD["Build with the route table"]
+    BLD --> OK{"Build succeeds?"}
+    OK -->|"yes"| URL["URL, with an optional anchor"]
+    OK -->|"no"| BEH["URL build error handlers"]
+    BEH -->|"a handler returns a URL"| URL
+    BEH -->|"no handler returns a URL"| ERR["Build error"]
+```
+
+**Relative and absolute URLs.** The form of the URL depends on the context. Inside a request, Flask builds a URL without the scheme and host by default. Outside a request, Flask builds an absolute URL by default. For an absolute URL outside a request, the configuration must have the server name. If the server name is not set, Flask raises an error.
+
+| Situation | Default URL form | Necessary settings |
+|---|---|---|
+| Inside a request | Path only, without the scheme and host | None |
+| Outside a request | Absolute URL, with the scheme and host | Server name, and also the application root and URL scheme if necessary |
+
+**Endpoints as stable names.** The endpoint identifies a destination, not the raw path. Because of this, you can change a URL rule, and all built links change with it. Blueprints can also mount the same module under different URL prefixes. Flask uses the endpoint as the key for the view function, the default values, and the build rules. In a blueprint, Flask adds the blueprint name to the start of each endpoint name. Thus two view functions with the same name in different blueprints do not conflict.
 
 ## Conclusion
 
-Routing is a two-way dictionary between addresses and code, anchored on stable endpoint names and driven by a single table used for both matching and building. Having read how requests reach handlers, continue to [The Context System](../the-context-system/README.md) to see how a handler reaches shared state, or to [Blueprints](../blueprints/README.md) to see how routes from many modules combine. The [request pipeline](../application-and-request-lifecycle/README.md) shows exactly where matching sits in the flow.
+Routing is a two-way map between URLs and code. It uses stable endpoint names and one route table for matching and for URL building. Next, read [The Context System](../the-context-system/README.md) to see how a view function gets the current objects. Read [Blueprints](../blueprints/README.md) to see how routes from many modules join one route table. The [request pipeline](../application-and-request-lifecycle/README.md) shows where matching and dispatch occur.

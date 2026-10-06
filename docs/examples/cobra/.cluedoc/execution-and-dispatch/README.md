@@ -4,39 +4,47 @@ repo: spf13/cobra
 sources:
   - command.go
   - args.go
+  - cobra.go
 ---
 
 ```mermaid
 flowchart LR
-    IN["raw words
-    from shell"] --> FIND["walk tree:
-    find deepest match"]
-    FIND -->|found| RUN["run that command"]
-    FIND -->|no match| SUG["suggest:
+    IN["words from the shell"] --> FIND["walk the tree:
+    find the deepest match"]
+    FIND -->|"match found"| RUN["run the target command"]
+    FIND -->|"unknown word"| SUG["error with a suggestion:
     did you mean ...?"]
 ```
 
 ## Abstract
 
-Execution is the moment a flat list of typed words becomes a running command. Starting from the root, the dispatcher walks the command tree one word at a time, descending into whichever child matches the next word, until the words run out or the next word is not a command. Whatever node it lands on is the target; the leftover words become that command's arguments. If a word looks like it was meant to be a command but matches nothing, the dispatcher offers a close alternative instead of failing silently. This paper covers how the target is found and the sequence that runs once it is.
+Execution changes a flat list of typed words into a command that runs. The dispatcher starts at the root command and walks the command tree one word at a time. At each level, it goes into the child whose name matches the next command word. When no child matches, the command where the dispatcher stops is the *target command*, and the other words go to it. If a word is almost the name of a command, the framework shows a suggestion. This paper describes how the dispatcher finds the target command and what occurs after that.
 
 ## Introduction
 
-A shell hands a program nothing but a list of strings. Somewhere in that list is the path to a command — one or more words naming a branch of the tree — mixed together with options and operands in whatever order the user chose. The framework's first job is to disentangle them: to figure out how far down the tree the user intended to go, and to treat everything past that point as input to the chosen command.
+The shell gives a program only a list of words. Some of these words are command words, which name a path in the tree. The other words are flags, flag values, and positional arguments, in the order that the user typed them. The first task of the framework is to separate these words. It must find how deep in the tree the user wants to go. Then it must give all other words to the target command.
 
-This is harder than scanning for the first non-option word, because options themselves can consume the word after them as a value, and that value must not be mistaken for a command name. Getting this wrong would route the user to the wrong command or swallow a legitimate argument. Dispatch therefore has to reason about options and command names together, and it must do so from the top of the tree downward so that each level's options are understood before the next word is judged.
+This task is more difficult than a search for the first word that is not a flag. Some flags take the next word as their value. The dispatcher must not read that value as a command word. If the dispatcher makes this mistake, it selects the wrong command or loses a positional argument. Thus, the dispatcher examines flags and command words together, from the top of the tree to the bottom.
 
 ## Related Work
 
-- Parent: [Cobra](../README.md) — the framework overview.
-- Child: [Lifecycle Hooks](./lifecycle-hooks/README.md) — the ordered stages that fire around a command's real work.
-- [Command Tree](../command-tree/README.md) — the structure being walked.
-- [Flag Handling](../flag-handling/README.md) — the options that dispatch must see through while searching.
-- [Argument Validation](../argument-validation/README.md) — the check applied to the leftover words before the command runs.
+- Parent: [Cobra](../README.md) gives the overview of the framework.
+- Child: [Lifecycle Hooks](./lifecycle-hooks/README.md) shows the ordered hooks around the main action of the target command.
+- [Command Tree](../command-tree/README.md) shows the structure that the dispatcher walks.
+- [Flag Handling](../flag-handling/README.md) shows the flags that the dispatcher must skip.
+- [Argument Validation](../argument-validation/README.md) shows the check on the other words before the main action.
 
 ## Description
 
-Dispatch always begins at the root, no matter which node was asked to execute. From there it repeatedly asks: of the remaining words, ignoring anything that looks like an option or an option's value, what is the first plain word? If a child matches that word — by name or by alias — the search descends into that child and removes the matched word from the list. When no child matches, the search stops and the current node becomes the target.
+**Start at the root.** Dispatch always starts at the root command, also when the author tells a different command to execute. Before the walk, the framework adds the commands that it supplies:
+
+1. It adds the help command, if the root command has subcommands.
+2. It adds the hidden command for completion requests, but only when the shell calls it.
+3. It adds the completion command, which writes completion scripts.
+
+The framework also makes sure that each command group that a child refers to exists. By default, the input words are the words of the process after the program name. The author can set different words, for example in a test.
+
+**The walk.** At each level, the dispatcher removes the flags and the flag values from the words that remain. Then it takes the first word that is left. If the name or an alias of a child matches that word, the dispatcher goes into that child. It also removes only that word from the list. If no child matches, the walk stops, and the current command is the target command.
 
 ```mermaid
 sequenceDiagram
@@ -44,45 +52,70 @@ sequenceDiagram
     participant D as dispatcher
     participant T as command tree
     U->>D: app server start --port 80
-    D->>T: at root, first plain word = "server"
-    T-->>D: matches child "server"
-    D->>T: at server, first plain word = "start"
-    T-->>D: matches child "start"
-    D->>T: at start, no further command word
-    T-->>D: target = "start", leftovers = --port 80
+    D->>T: at root, the first command word is "server"
+    T-->>D: child "server" matches
+    D->>T: at server, the first command word is "start"
+    T-->>D: child "start" matches
+    D->>T: at start, no more command words
+    T-->>D: target is "start", other words are "--port 80"
 ```
 
-**Seeing through options.** To find "the first plain word," the dispatcher must skip options and, crucially, the values that follow them. An option written as a single word carries its own value; an option written as two words takes the following word as its value, and that following word must not be treated as a command. A bare double-dash marks the end of options entirely, so everything after it is operands. Only after filtering these out does a remaining word count as a possible command name.
+**Flag values are not command words.** To find the next command word, the dispatcher skips each flag and each flag value. The rules are as follows:
 
-**Two walking strategies.** The default strategy locates the target first and parses that command's options afterward. An alternative strategy parses each level's options as it descends, which is necessary when a persistent option on a parent should influence how the rest of the line is interpreted before the child is reached. The two differ in when parsing happens relative to descent, but both end at the same kind of result: a target node and its leftover words.
+- If a flag and its value are one word with an equals sign, the dispatcher skips only that word.
+- If a flag needs a value and has no equals sign, the dispatcher also skips the next word.
+- If a flag does not need a value, such as a true-or-false switch, the dispatcher does not skip the next word.
+- A double dash stops the search, and all words after it are positional arguments.
 
-**Suggestions for near-misses.** When the user types a word that matches no command, the framework does not merely report the failure. It compares the typo against the available command names using an edit-distance measure and by prefix, and if something is close enough it prints a "did you mean" hint listing the likely intended commands. A command can also declare that it should be suggested for particular mistaken words. This turns a dead end into a gentle correction.
+**Two walk strategies.** The default strategy finds the target command first. Then the target command parses all the flags. The other strategy is *traverse children*, and the author turns it on at the root command. With this strategy, the dispatcher parses the flags of each level before it goes down to the next level. Thus, a parent can accept its own local flags before a child word. Both strategies give the same result: a target command and the words that remain.
 
 ```mermaid
 flowchart TD
-    T["user typed: 'serer'"] --> C{close to a
-    known command?}
-    C -->|edit distance small| Y["suggest 'server'"]
-    C -->|prefix match| Y
-    C -->|nothing close| N["unknown command error"]
+    W["input words"] --> Q{"Is traverse children on?"}
+    Q -->|"no (default)"| F1["find the target command"]
+    F1 --> F2["the target command parses all flags"]
+    Q -->|"yes"| T1["parse the flags of this level"]
+    T1 --> T2{"Does a child match the next word?"}
+    T2 -->|"yes"| T3["go into that child"]
+    T3 --> T1
+    T2 -->|"no"| R
+    F2 --> R["target command and the words that remain"]
 ```
 
-**From target to running.** Once the target and its leftover words are known, control passes to that command. It finalizes its options, parses the leftovers into flags and operands, and — unless help or a version request short-circuits things — validates the operands and then runs. The full ordered sequence of author-supplied stages that surrounds the actual work is the subject of the child paper, [Lifecycle Hooks](./lifecycle-hooks/README.md). Errors raised anywhere in this sequence flow back to the top, where the framework decides whether to print the error, show usage, or, in the special case of a help request, display help instead.
+**Suggestions for wrong words.** Assume that the root command has subcommands and no argument rule. If the first command word matches no child, dispatch fails. Then the framework compares the wrong word with the names of the visible children. It suggests a name in these conditions:
+
+- The edit distance between the two words is small. The default limit is two changes, and upper case and lower case are the same.
+- The name starts with the wrong word.
+- The command lists the wrong word as a word for which the framework suggests it.
+
+The author can change the limit of the edit distance or turn off suggestions. This check applies only at the root command. A deeper command that has no argument rule accepts an unknown word as a positional argument.
+
+```mermaid
+flowchart TD
+    T["user typed: serer"] --> C{"Is it near a visible command name?"}
+    C -->|"edit distance is two or less"| Y["suggest: server"]
+    C -->|"the name starts with the word"| Y
+    C -->|"the command lists the word"| Y
+    C -->|"none of these"| N["unknown command error, no suggestion"]
+```
+
+**From the target command to the main action.** When dispatch finds the target command, the target command starts its own steps. If the command is deprecated, it shows a warning first. Then it adds the help flag and the version flag, and parses the other words. If the user asks for help or for the version, the command shows that text and stops. If the command is not runnable, it shows its help and stops. Otherwise, it checks the positional arguments and starts the run sequence, which [Lifecycle Hooks](./lifecycle-hooks/README.md) describes.
 
 ```mermaid
 flowchart LR
-    TGT["target command"] --> P["parse leftovers
-    into flags + operands"]
-    P --> H{help or
-    version asked?}
-    H -->|yes| SHOW["show help / version, stop"]
-    H -->|no| V["validate operands"]
-    V --> RUN["run lifecycle"]
-    RUN --> ERR{error?}
-    ERR -->|yes| REPORT["report error, maybe show usage"]
-    ERR -->|no| DONE["done"]
+    TGT["target command"] --> P["parse the other words
+    into flags and positional arguments"]
+    P --> H{"Help or version requested, or not runnable?"}
+    H -->|"yes"| SHOW["show help or version, stop"]
+    H -->|"no"| V["check the positional arguments"]
+    V --> RUN["run sequence"]
+    RUN --> ERR{"Error?"}
+    ERR -->|"yes"| REPORT["show the error and the usage text"]
+    ERR -->|"no"| DONE["done"]
 ```
+
+**Errors.** All errors go back to the top of the execution. If an error comes from a help request, the framework shows the help and reports no error. For other errors, the framework shows the error message with a prefix, and then it shows the usage text. The author can silence the error message, the usage text, or both. If the author silences them on the root command, the silence applies to all commands.
 
 ## Conclusion
 
-Dispatch is the bridge between a shell's flat word list and Cobra's structured tree: descend by matching plain words, see through options and their values while doing so, and turn near-misses into suggestions. When the target is found, its leftover words are validated and it runs. To follow what "runs" means in detail, continue to [Lifecycle Hooks](./lifecycle-hooks/README.md); to understand the option-parsing that dispatch must see through, read [Flag Handling](../flag-handling/README.md).
+Dispatch connects the flat list of words from the shell to the structured tree of Cobra. The dispatcher goes down the tree when a child name matches, and it skips flags and flag values. When a word is wrong, the framework suggests a near name. When the dispatcher finds the target command, the framework checks the positional arguments and runs the command. To see the steps of the run, read [Lifecycle Hooks](./lifecycle-hooks/README.md). To see the flags that the dispatcher must skip, read [Flag Handling](../flag-handling/README.md).

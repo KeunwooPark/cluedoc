@@ -8,13 +8,13 @@ sources:
 
 ```mermaid
 flowchart TD
-    START["next word"] --> LIT{"is it the<br/>-- terminator?"}
-    LIT -- yes --> STOP["everything after is operands"]
-    LIT -- no --> VAR{"collecting a<br/>variadic value?"}
-    VAR -- yes --> EAT["swallow as another value"]
-    VAR -- no --> LONG{"long, short, combined,<br/>or equals form?"}
-    LONG -- recognised --> EMIT["emit option event with value"]
-    LONG -- not an option --> OPER["treat as operand or unknown"]
+    START["next word"] --> LIT{"is it the<br/>double-dash terminator?"}
+    LIT -- yes --> STOP["all other words are operands"]
+    LIT -- no --> VAR{"a variadic option<br/>collects values?"}
+    VAR -- yes --> EAT["add the word as a value"]
+    VAR -- no --> FORM{"long, short, bundled,<br/>or equals form?"}
+    FORM -- "known option" --> EMIT["send an option event with the value"]
+    FORM -- "not known" --> OPER["keep as an operand or an unknown word"]
     EMIT --> START
     EAT --> START
     OPER --> START
@@ -22,73 +22,102 @@ flowchart TD
 
 ## Abstract
 
-Option parsing is the single left-to-right scan that turns a flat list of words into recognised options, their values, and the leftover operands. This paper describes that parse loop and the vocabulary of option *kinds* it recognises — boolean, negatable, value-taking, and variadic — along with the several surface forms a flag can take on the command line. It is the busiest capability in the framework and the one every invocation passes through.
+Option parsing is one scan from left to right over the words of the command line. The scan changes a flat list of words into known options, their values, and the other operands. This paper describes this *parse loop* and the four kinds of option that it knows. It also describes the different forms that an option can have on the command line. Each command line goes through the parse loop.
 
 ## Introduction
 
-The operating system delivers arguments as undifferentiated strings. A dash-led word might be a flag the current command knows, a flag that belongs to a subcommand further down the tree, a negative number that only looks like a flag, or genuinely unknown. The same option might appear as a long name, a single-letter short, several shorts bundled behind one dash, or a name joined to its value by an equals sign. Parsing must sort all of this out in one pass, without yet knowing which command will ultimately run.
+The operating system gives the program its arguments as plain text words. A word that starts with a dash can have different meanings:
 
-The reader needs two ideas. First, the loop *classifies* rather than validates: it decides what each word is and files it as a recognised option, a plain operand, or an unknown to be reprocessed by a subcommand later. Second, recognising an option does not itself compute a value — it announces the option and lets the value-resolution layer decide what the value becomes. That separation keeps the scan simple and the value rules in one place.
+- It can be an option of the current command.
+- It can be an option of a subcommand lower in the tree.
+- It can be a negative number.
+- It can be an unknown option.
+
+Also, the same option can have different forms. It can be a long name or a short letter. It can also be a group of short letters after one dash, or a name with an equals sign and a value. The parse loop must sort all of these words in one scan. At this time, it does not know which command will run.
+
+The reader must know two ideas. First, the parse loop *classifies* words, but it does not validate them. It puts each word into one of three groups: known options, operands, and unknown words. A subcommand parses the unknown words again later. Second, the parse loop does not calculate option values. It sends an event for each known option, and the value layer sets the final value. This separation keeps the parse loop simple and keeps all value rules in one place.
 
 ## Related Work
 
-- Parent: [Commander.js](../README.md) — where the parse loop sits in the whole flow.
-- Child: [Value Sources](./value-resolution/README.md) — what happens to an option after it is recognised.
-- The operands this loop sets aside are consumed by [Positional Arguments](../positional-arguments/README.md).
-- Words that name a child are handed off per the [Command Model](../README.md).
-- An unrecognised flag becomes a message via [Error Handling](../error-handling/README.md).
+- Parent: [Commander.js](../README.md) — the place of the parse loop in the full flow.
+- Child: [Value Sources](./value-resolution/README.md) — what occurs to an option after the parse loop finds it.
+- The operands that the parse loop keeps: [Positional Arguments](../positional-arguments/README.md).
+- The dispatch of an operand that names a child: [Command Model](../command-model/README.md).
+- The message for an unknown option: [Error Handling](../error-handling/README.md).
 
 ## Description
 
-**Four kinds of option.** Every option falls into exactly one kind, decided from how it was declared:
+**There are four kinds of option.** The declaration of an option sets its kind. Each option has one kind only.
 
 ```mermaid
 flowchart TD
-    O["an option"] --> B["boolean<br/>present or absent, no value"]
-    O --> N["negatable<br/>a no-form that turns something off"]
-    O --> R["value-taking<br/>requires or optionally takes an argument"]
-    O --> V["variadic<br/>collects repeated values into a list"]
+    O["an option"] --> B["boolean option<br/>on or off, no value"]
+    O --> N["negatable option<br/>a no-form that sets a value to off"]
+    O --> R["value option<br/>a required value or an optional value"]
+    O --> V["variadic option<br/>collects many values into a list"]
 ```
 
-A boolean is simply on or off. A negatable option is the *no*-prefixed twin of a setting, flipping it off and, when it stands alone, defaulting the underlying setting to on. A value-taking option consumes an argument, either required or optional. A variadic option keeps swallowing following words as more values until the next thing that looks like a flag.
+The kinds are as follows:
 
-**Surface forms.** The same option can be written several ways, and the loop recognises each:
+- A *boolean option* is on or off. It does not take a value.
+- A *negatable option* has a name that starts with "no". It sets its value to off. If no positive option with the same name exists, its value is on by default.
+- A *value option* takes a value. The value is required or optional.
+- A *variadic option* is a value option that collects the next words as more values. It stops at the next word that looks like an option.
+
+**An option can have many forms.** The parse loop knows each form in the list below.
 
 ```
---verbose            long boolean
---output file.txt    long with a following value
---output=file.txt    long joined by equals
--o file.txt          short with a following value
--abc                 bundled shorts: -a -b then -c
--ofile.txt           short with value packed behind it
---no-color           negated form
+--verbose            long boolean option
+--output file.txt    long option, value in the next word
+--output=file.txt    long option, value after an equals sign
+-o file.txt          short option, value in the next word
+-abc                 bundled short options: -a, then -b, then -c
+-ofile.txt           short option, value in the same word
+--no-color           negatable option
 ```
 
-Bundled shorts are peeled one letter at a time: a leading known boolean is consumed and the remaining letters are re-fed as if they were a fresh dash-group, so a run of flags collapses into one token. A short flag that takes a value can carry that value immediately behind it in the same word.
+The parse loop reads a bundle of short options one letter at a time. If the first letter is a known boolean option, the loop uses it. Then it reads the other letters as a new bundle. If the first letter is a short option with a required value, the other letters are its value. An author can set the same rule for a short option with an optional value. This setting is on by default. The equals form applies only to an option that takes a value.
 
-**The scan, step by step.** The loop keeps a running destination — operands versus unknowns — and two pieces of transient state: whether it is mid-way through collecting a variadic option's values, and whether it is peeling a bundle of shorts.
+**How a value option gets its value.** The two types of value option use different rules:
+
+- An option with a *required value* always takes the next word. This is true also when the next word starts with a dash.
+- An option with an *optional value* takes the next word only if the word does not look like an option. A negative number counts as a value.
+
+If no word is available for a required value, the parse loop reports an error.
+
+**The scan, step by step.** The parse loop writes each word to one of two lists: the operand list or the unknown list. It also keeps two temporary states. One state is the active variadic option. The other state is the rest of a bundle of short options.
 
 ```mermaid
 flowchart TD
-    A["read word"] --> B{"literal --?"}
-    B -- yes --> Z["copy the rest as operands, stop"]
-    B -- no --> C{"feeding an active<br/>variadic option?"}
-    C -- yes --> C2["emit as another value, loop"]
+    A["read the word"] --> B{"double dash?"}
+    B -- yes --> Z["copy the other words as operands, stop"]
+    B -- no --> C{"an active<br/>variadic option?"}
+    C -- yes --> C2["send as one more value"]
     C -- no --> D{"looks like an option?"}
-    D -- yes --> E{"known here?"}
-    E -- yes --> F["consume value if needed, emit, loop"]
-    E -- no --> G["this and the rest become unknown"]
-    D -- no --> H{"positional policy<br/>says stop here?"}
-    H -- yes --> I["hand remainder onward, stop"]
-    H -- no --> J["record as operand, loop"]
+    D -- yes --> E{"known to this command?"}
+    E -- yes --> F["take the value if necessary, send the event"]
+    E -- no --> G["this word and all subsequent words go to the unknown list"]
+    D -- no --> H{"a positional rule<br/>stops the scan?"}
+    H -- yes --> I["send the other words onward, stop"]
+    H -- no --> J["keep as an operand"]
 ```
 
-A double-dash on its own is a hard terminator: everything after it is taken literally as operands, never as flags. A word that matches the pattern of a negative number is treated as a value rather than an option, unless the command actually declares a digit as a short flag. When a dash-led word is *not* recognised by the current command, the loop flips its destination to *unknown* and lets that word and everything after it flow down to a subcommand, which gets its own chance to recognise them.
+These rules apply to special words:
 
-**Positional policies bend the scan.** Two opt-in modes change where the scan yields. In positional mode, once a subcommand name appears the current command stops claiming options and hands the rest down, so a child can own flags that share a name with the parent. In pass-through mode, the first plain operand freezes option processing entirely, so everything after it is forwarded untouched — invaluable when wrapping another tool whose flags must not be intercepted.
+- A double dash alone stops the parse loop. All words after it are operands, also when they start with a dash.
+- A word in the form of a negative number is a value, not an option. But if the command or an ancestor has a digit as a short option, this rule does not apply.
+- If the current command does not know a word that starts with a dash, the loop changes to the unknown list. That word and all subsequent words go to this list. A subcommand can then find its own options in this list.
+- In a command without subcommands, a negative number is an operand, not an unknown word.
 
-**Recognition emits, it does not compute.** Whenever the loop identifies a known option it announces it, optionally with a raw value string. Turning that announcement into a stored, coerced, sourced value is the job of the next layer.
+**Positional rules change the scan.** An author can turn on two optional rules:
+
+- With *positional options*, the options of a command must come before its subcommand. When the loop finds the name of a subcommand, it stops. All other words go to the child. Thus, a child can use an option name that its parent also uses.
+- With *pass-through options*, the loop stops at the first word that it does not know. All other words go to the program without a change. This rule helps when a program starts a different tool that has its own options.
+
+A subcommand can use pass-through options only if its parent commands use positional options. If not, Commander reports an error when the author declares it.
+
+**The parse loop sends events, but it does not calculate values.** When the loop finds a known option, it sends an event for that option. The event can carry a raw text value. The value layer then changes this event into a stored option value with a value source.
 
 ## Conclusion
 
-Option parsing is one disciplined left-to-right scan that classifies every word, recognises four kinds of option across several surface forms, peels bundled shorts, honours the double-dash terminator and negative numbers, and defers anything it does not recognise to a subcommand. It announces recognised options rather than computing their values. Follow that announcement into [Value Sources](./value-resolution/README.md), or step back to the [Command Model](../README.md) to see how the operands it sets aside choose the running command.
+Option parsing is one scan from left to right that classifies each word. It knows four kinds of option and many forms of each option. It reads bundles of short options and stops at the double-dash terminator. It keeps negative numbers as values and sends unknown words to a subcommand. It sends events for known options, but it does not calculate their values. Follow those events into [Value Sources](./value-resolution/README.md). Or go to the [Command Model](../command-model/README.md) to learn how the operands select the command that runs.

@@ -12,44 +12,44 @@ sources:
 
 ```mermaid
 flowchart TD
-    RAW["raw command line"] --> CM["Command Model<br/>who am I, which subcommand runs"]
+    RAW["words from the command line"] --> CM["Command Model<br/>the command tree"]
     CM --> OP["Option Parsing<br/>the parse loop"]
-    OP --> VR["Value Sources<br/>defaults, env, coercion"]
-    CM --> ARGS["Positional Arguments"]
-    OP --> ERR["Error Handling<br/>and suggestions"]
+    OP --> VR["Value Sources<br/>the final option values"]
+    CM --> ARGS["Positional Arguments<br/>the operands"]
+    OP --> ERR["Error Handling<br/>messages and suggestions"]
     ARGS --> ERR
-    CM --> LIFE["Action Lifecycle<br/>hooks and handlers"]
-    CM --> HELP["Help Generation"]
-    LIFE --> DONE(["your program runs"])
+    CM --> LIFE["Action Lifecycle<br/>hooks and the action handler"]
+    CM --> HELP["Help Generation<br/>the help screen"]
+    LIFE --> DONE(["the program code runs"])
 ```
 
 ## Abstract
 
-Commander is the layer that sits between a bare list of words typed at a terminal and the function a developer actually wants to run. It lets an author declare the shape of a command line program — its commands, its options, its arguments, its help — and then turns any real invocation into resolved values and a dispatched action. This root paper maps the whole system into a handful of capabilities, each explored in its own paper.
+Commander is a framework for command line programs in Node.js. An author declares the commands, options, and arguments of a program. Then Commander reads the words that the user types and gives the program the correct values. It also runs the correct code for the command that the user selects. This root paper divides the framework into a small set of capabilities. Each capability has its own paper.
 
 ## Introduction
 
-Every command line tool faces the same chore. The operating system hands the program a flat array of strings and nothing more. Somewhere those strings must be split into flags and their values, matched against what the tool understands, coerced into useful types, checked for mistakes, and finally routed to the right piece of code. Doing this by hand is tedious and easy to get subtly wrong, especially once a tool grows subcommands, shorthand flags, environment fallbacks, and a help screen that must stay in sync with everything else.
+All command line programs must do the same work with their input. The operating system gives the program only a flat list of words. The program must find the options and their values in this list. It must change text into useful types, find mistakes, and run the correct code. This work is difficult to do correctly by hand, especially when a program has subcommands and a help screen.
 
-Commander exists to make that shape *declarative*. An author describes what the program accepts; the framework owns the mechanics of recognising it. The reader arriving here needs only one mental model: a program is a **tree of commands**, and parsing is a **walk down that tree**, where each command consumes the flags it recognises, passes the rest along, and eventually a single command takes charge and runs.
+Commander lets the author declare this structure instead. The author tells Commander what the program accepts, and Commander does the parse. The reader needs one model to start. A program is a **command tree**, and a parse is a walk down this tree. Each command takes the options that it knows and sends the other words to a child. At the end, one command runs.
 
 ## Related Work
 
-This set of papers decomposes the framework by capability. Start here, then descend:
+This set of papers divides the framework by capability. Start here, then go down the tree:
 
-- [Command Model](./command-model/README.md) — how commands and subcommands are declared, nested, and dispatched.
-  - [Action Lifecycle](./command-model/action-lifecycle/README.md) — handlers, hooks, and the ordered choreography around a run.
-- [Option Parsing](./option-parsing/README.md) — the parse loop that recognises flags and their values.
-  - [Value Sources](./option-parsing/value-resolution/README.md) — where a setting's final value comes from and how it is coerced.
-- [Positional Arguments](./positional-arguments/README.md) — the ordered operands a command consumes.
-- [Help Generation](./help-generation/README.md) — the usage screen assembled from the declared shape.
-- [Error Handling](./error-handling/README.md) — refusals, exit control, and did-you-mean suggestions.
+- [Command Model](./command-model/README.md) — how the author declares, nests, and dispatches commands.
+  - [Action Lifecycle](./command-model/action-lifecycle/README.md) — the action handler and the hooks that run around it.
+- [Option Parsing](./option-parsing/README.md) — the parse loop that finds options and their values.
+  - [Value Sources](./option-parsing/value-resolution/README.md) — where the final value of an option comes from.
+- [Positional Arguments](./positional-arguments/README.md) — the operands that a command uses, in their order.
+- [Help Generation](./help-generation/README.md) — the help screen that Commander makes from the declarations.
+- [Error Handling](./error-handling/README.md) — error messages, exit control, and suggestions.
 
 ## Description
 
-The system has a single organising idea and several capabilities hanging off it.
+The framework has one main idea and a set of capabilities around it.
 
-**The organising idea is the command tree.** The top-level program is itself a command. Any command may own child commands, which may own their own children. A real invocation is resolved by walking this tree from the root: each command grabs the flags it recognises, and the first unrecognised word that names a child hands control down a level.
+**The main idea is the command tree.** The program itself is the root command. Each command can have child commands, and each child can have its own children. Commander walks this tree from the root for each parse. Each command takes the options that it knows. If the next operand is the name of a child, control goes down one level.
 
 ```mermaid
 flowchart LR
@@ -58,10 +58,10 @@ flowchart LR
     P --> C["deploy"]
     C --> C1["staging"]
     C --> C2["prod"]
-    P -. "help / version live here too" .-> P
+    P -. "help and version options" .-> P
 ```
 
-**Around that idea sit the capabilities.** Each maps to one paper:
+**The capabilities are around this idea.** The diagram shows three groups of capabilities. Each capability has its own paper.
 
 ```mermaid
 flowchart TD
@@ -76,7 +76,7 @@ flowchart TD
       R3["dispatch and run"]
     end
     subgraph Support
-      S1["build help"]
+      S1["make help"]
       S2["report errors"]
     end
     D1 --> R1
@@ -89,10 +89,19 @@ flowchart TD
     D2 --> S1
 ```
 
-The **parse loop** is the beating heart: it scans the arguments once, classifies each word as a flag, a flag-with-value, a plain operand, or an unknown to be reprocessed later, and emits an event whenever it recognises an option. **Value resolution** decides what a setting actually ends up as, blending command line input with environment variables, presets, defaults, and custom coercion, each tagged with the source it came from. **Positional arguments** capture the ordered operands that are not flags. **Dispatch** picks the single command that will run and invokes its handler inside an ordered lifecycle of hooks. **Help** is generated from the same declarations so it can never drift, and **error handling** turns every failure into a clear, exit-coded message, often with a spelling suggestion.
+The table gives the function of each capability.
 
-A reader can enter at any of these; they interlock but each stands on its own.
+| Capability | Function |
+|---|---|
+| Parse loop | It reads the words one time, from left to right. It finds each option and sends an event with the value. |
+| Value sources | It sets the final value of each option from the command line, the environment, defaults, and custom parsers. |
+| Positional arguments | It puts the operands into the declared argument slots. |
+| Dispatch | It selects the command that runs. Then it calls the action handler between the lifecycle hooks. |
+| Help | It makes the help screen from the declarations, thus the help is always correct. |
+| Error handling | It changes each failure into a clear message with an exit code. It often adds a suggestion. |
+
+A reader can start at any of these papers. The capabilities connect, but each paper is complete.
 
 ## Conclusion
 
-Commander is best understood as a declarative description of a command tree plus a set of runtime capabilities that interpret a real invocation against it. The natural next stop is the [Command Model](./command-model/README.md), which establishes the tree that every other capability walks; from there the [Option Parsing](./option-parsing/README.md) paper opens up the parse loop where most of the real work happens.
+Commander is a declared command tree plus a set of runtime capabilities. These capabilities examine each real command line against the tree. Read the [Command Model](./command-model/README.md) next, because all other capabilities walk the tree that it makes. Then read [Option Parsing](./option-parsing/README.md), which describes the parse loop. The parse loop does most of the work.
